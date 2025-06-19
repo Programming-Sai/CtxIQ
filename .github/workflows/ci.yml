@@ -26,10 +26,10 @@ jobs:
         run: npm run lint
 
       - name: Format Check
-        run: npx prettier --check .
+        run: npm run format
 
       - name: TypeScript Build
         run: npm run build
 
       - name: Run Tests
-        run: npm test
+        run: npm run test
