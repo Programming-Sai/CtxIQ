@@ -1,0 +1,11 @@
+.tracker.json
+.eslintrc.js
+eslint.config.mjs
+.prettierrc
+.prettierignore
+tsconfig.json
+jest.config.*
+.git
+.github
+test/
+.fttignore 

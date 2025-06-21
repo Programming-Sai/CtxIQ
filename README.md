@@ -15,3 +15,31 @@
 **This project is under active development.**  
 Expect frequent updates and breaking changes until the first stable release.  
 Follow for progress or contribute!
+
+```ftt
+<...>/Projects\CtxIQ> ftt
+
+
+./CtxIQ/*
+        ├─ .github/*
+        |       └─ workflows/*
+        |               └─ ci.yml
+        ├─ dist/*
+        |       └─ index.js
+        ├─ src/*
+        |       └─ index.ts
+        ├─ test/*
+        |       └─ sanity.test.ts
+        ├─ .fttignore
+        ├─ .gitignore
+        ├─ .prettierignore
+        ├─ .tracker.json
+        ├─ eslint.config.mjs
+        ├─ jest.config.mjs
+        ├─ package-lock.json
+        ├─ package.json
+        ├─ README.md
+        └─ tsconfig.json
+
+<...>/Projects\CtxIQ>
+```
