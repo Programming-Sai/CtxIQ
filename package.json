@@ -15,7 +15,7 @@
     "typescript": "^5.8.3"
   },
   "name": "ctxiq",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Context and memory orchestration toolkit for building smarter AI assistants with TypeScript.",
   "main": "dist/index.js",
   "types": "src/index.ts",
@@ -46,7 +46,7 @@
     "prompt-engineering"
   ],
   "author": "Programming Sai",
-  "license": "",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/Programming-Sai/CtxIQ/issues"
   },
