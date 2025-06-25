@@ -43,3 +43,13 @@ Follow for progress or contribute!
 
 <...>/Projects\CtxIQ>
 ```
+
+# Session persistence flow
+
+```txt
+User sends a message → Manager finds the session → Session adds the messages → Session emits "messageAdded" → User’s listener or hook persists session to disk or DB
+
+```
+
+free for dev
+open source alternatives
