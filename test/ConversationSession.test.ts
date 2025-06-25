@@ -5,7 +5,7 @@ import { Message } from "../src/types";
 describe("ConversationSession", () => {
   const makeMessage = (
     role: Message["role"] = "user",
-    content = "Hi!"
+    content = "Hi!",
   ): Partial<Message> => ({
     role,
     content,
