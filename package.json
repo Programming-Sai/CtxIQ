@@ -18,6 +18,7 @@
   "version": "0.0.1",
   "description": "Context and memory orchestration toolkit for building smarter AI assistants with TypeScript.",
   "main": "dist/index.js",
+  "type": "module",
   "types": "src/index.ts",
   "scripts": {
     "dev": "node dist/index.js",

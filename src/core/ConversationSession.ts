@@ -2,6 +2,7 @@
 
 import { EventEmitter } from "events";
 import { ConversationSessionConfig, Message, SessionOptions } from "../types";
+import { truncate } from "fs";
 
 export class ConversationSession extends EventEmitter {
   public id: string;
@@ -9,6 +10,10 @@ export class ConversationSession extends EventEmitter {
   public lastModifiedAt: number;
   public sessionName: string;
   public messages: Map<string, Message>;
+  public summaries: Map<string, Message>;
+  private messageCounter = 0;
+  public useSequentialIds = false;
+  public messageOrder: string[];
 
   constructor(config: ConversationSessionConfig) {
     super();
@@ -17,9 +22,34 @@ export class ConversationSession extends EventEmitter {
     this.lastModifiedAt = config.lastModifiedAt;
     this.sessionName = config.sessionName;
     this.messages = new Map();
+    this.summaries = new Map();
+    this.messageOrder = [];
   }
 
-  // ─── Core ────────────────────────────────────────────────────────────────────
+  addSummary(summary: Message): void {
+    const id = this.generateMessageId();
+    summary.id = id;
+    if (summary.summaryOf && Array.isArray(summary.summaryOf)) {
+      summary.summaryOf = new Set(summary.summaryOf);
+    }
+    this.summaries.set(id, summary);
+    this.messageOrder.push(id);
+    this.emit("summaryAdded", id, summary);
+  }
+
+  getSummaries(): Message[] {
+    return this.getCompactedMessages();
+  }
+  getSummaryById(id: string): Message | undefined {
+    return;
+  }
+  deleteSummary(id: string): boolean {
+    return false;
+  }
+  setSummaries(summaries: Message[]): void {}
+  clearSummaries(): void {}
+
+  // ─── Message Core ────────────────────────────────────────────────────────────────────
 
   /**
    * Adds a new message to the session.
@@ -29,9 +59,11 @@ export class ConversationSession extends EventEmitter {
    * @param message - The message to add (without an ID).
    */
   addMessage(message: Message): void {
+    if (this.isSummaryMessage(message)) return this.addSummary(message);
     const id = this.generateMessageId();
     message.id = id;
     this.messages.set(id, message);
+    this.messageOrder.push(id);
     this.emit("messageAdded", id, message);
   }
 
@@ -119,7 +151,16 @@ export class ConversationSession extends EventEmitter {
 
   // ─── Summary Helpers & System Prompt ───────────────────────────────────────
 
-  isSummaryMessage(msg: Message) {}
+  isSummaryMessage(msg: Message) {
+    return msg.role === "summary";
+  }
+  isMessageSummarized(msg: Message): boolean {
+    for (const summary of this.summaries.values()) {
+      if (summary.summaryOf?.has(msg.id)) return true;
+    }
+    return false;
+  }
+
   getSummaryMessages() {}
   getVisibleMessages() {}
   getLLMMessages(windowSize?: number) {}
@@ -128,11 +169,53 @@ export class ConversationSession extends EventEmitter {
   // ─── Utilities ──────────────────────────────────────────────────────────────
 
   generateMessageId(): string {
-    return crypto.randomUUID();
+    if (this.useSequentialIds) {
+      this.messageCounter += 1;
+      return `msg-${this.messageCounter}`;
+    } else {
+      return crypto.randomUUID();
+    }
   }
   countTokensInMessage(message: Message) {}
   filterMessagesByRole(role: string) {}
-  getMessagesInRange(startId: string, endId: string) {}
+
+  getMessageWindow(
+    windowTokenLimit: number,
+    overflowStrategy: string = "truncate",
+    messages: Message[] = this.getMessages(),
+  ): Message[] {
+    let l = 0;
+    let tokenCount = 0;
+    for (let r = 0; r < messages.length; r++) {
+      tokenCount += messages[r].tokens;
+      while (tokenCount > windowTokenLimit) {
+        tokenCount -= messages[l].tokens;
+        l += 1;
+      }
+    }
+    return messages.slice(l, messages.length);
+  }
+
+  getCompactedMessages(): Message[] {
+    const result: Message[] = [];
+    const covered = new Set<string>();
+
+    for (let i = this.messageOrder.length - 1; i >= 0; i--) {
+      const id = this.messageOrder[i];
+      const msg = this.messages.get(id) || this.summaries.get(id);
+      if (!msg) continue;
+
+      if (this.isSummaryMessage(msg)) {
+        result.push(msg);
+        msg.summaryOf?.forEach((coveredId) => covered.add(coveredId));
+      } else if (!covered.has(id)) {
+        result.push(msg);
+      }
+    }
+
+    return result.reverse();
+  }
+
   hasSummaryOverflowed() {}
   hasMessages() {}
   getLastMessage() {
@@ -186,3 +269,64 @@ messagesReplaced	Entire message buffer is overwritten
 sessionModified	Any significant update occurs
 promptOverflowed
  */
+
+// const session = new ConversationSession({
+//   id: "sess-1",
+//   createdAt: Date.now(),
+//   lastModifiedAt: Date.now(),
+//   sessionName: "TestSession",
+// });
+// session.useSequentialIds = true;
+
+// const createSessionWithData = () => {
+//   const data = [
+//     { role: "system", content: "System prompt", tokens: 5 },
+//     { role: "user", content: "Hi", tokens: 3 },
+//     { role: "assistant", content: "Hello", tokens: 4 },
+//     { role: "user", content: "Explain quantum physics", tokens: 15 },
+//     {
+//       role: "summary",
+//       content: "Summary of intro",
+//       tokens: 6,
+//       summaryOf: new Set(["msg-1", "msg-2", "msg-3", "msg-4"]),
+//     },
+//     { role: "assistant", content: "Here’s a short version...", tokens: 8 },
+//     { role: "user", content: "Follow-up on physics", tokens: 10 },
+//     { role: "assistant", content: "Answering follow-up", tokens: 9 },
+//     {
+//       role: "summary",
+//       content: "Physics discussion summary",
+//       tokens: 5,
+//       summaryOf: new Set(["msg-6", "msg-7", "msg-8"]),
+//     },
+//     { role: "user", content: "New unrelated topic", tokens: 6 },
+//     { role: "assistant", content: "Response to new topic", tokens: 7 },
+//     {
+//       role: "summary",
+//       content: "Third summary",
+//       tokens: 4,
+//       summaryOf: new Set(["msg-10", "msg-11"]),
+//     },
+//     { role: "user", content: "Final topic", tokens: 5 },
+//   ];
+
+//   let id = 0;
+//   for (const item of data) {
+//     const msg = {
+//       id: `msg-${++id}`,
+//       role: item.role as Message["role"],
+//       content: item.content,
+//       tokens: item.tokens,
+//       summaryOf: item.summaryOf, // will be undefined for normal messages
+//     } as Message;
+
+//     session.addMessage(msg); // now uses addMessage for both types
+//   }
+// };
+
+// createSessionWithData();
+// // console.log(session.messages, session.summaries, session.messageOrder);
+// // console.log(session.getCompactedMessages());
+// console.log(
+//   session.getMessageWindow(10, undefined, session.getCompactedMessages())
+// );

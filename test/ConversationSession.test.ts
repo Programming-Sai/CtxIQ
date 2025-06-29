@@ -70,4 +70,60 @@ describe("ConversationSession", () => {
     expect(clone.sessionName).toContain("Clone");
     expect(clone.id).toBe("sess-2");
   });
+
+  describe("Summaries and Compaction", () => {
+    it("should compact messages, excluding those covered by summaries", () => {
+      const session = createSession();
+      session.useSequentialIds = true;
+
+      // Add raw messages
+      session.addMessage({ role: "user", content: "A", tokens: 1 } as Message);
+      session.addMessage({ role: "user", content: "B", tokens: 1 } as Message);
+      session.addMessage({ role: "user", content: "C", tokens: 1 } as Message);
+
+      // Summary covering first three
+      session.addMessage({
+        role: "summary",
+        content: "Summ ABC",
+        tokens: 2,
+        summaryOf: new Set(["msg-1", "msg-2", "msg-3"]),
+      } as Message);
+
+      // Add another message after summary
+      session.addMessage({ role: "user", content: "D", tokens: 1 } as Message);
+
+      const compacted = session.getCompactedMessages();
+      expect(compacted.map((m) => m.content)).toEqual(["Summ ABC", "D"]);
+    });
+
+    it("getMessageWindow truncates compacted messages within token limit", () => {
+      const session = createSession();
+      session.useSequentialIds = true;
+
+      // Create a sequence and summaries
+      const data: Partial<Message>[] = [
+        { role: "system", content: "Sys", tokens: 5 },
+        { role: "user", content: "Hi", tokens: 3 },
+        { role: "assistant", content: "Hello", tokens: 4 },
+        { role: "user", content: "Explain", tokens: 10 },
+        {
+          role: "summary",
+          content: "Sum1",
+          tokens: 6,
+          summaryOf: new Set(["msg-1", "msg-2", "msg-3", "msg-4"]),
+        },
+        { role: "user", content: "Next", tokens: 8 },
+      ];
+
+      data.forEach((item) => session.addMessage(item as Message));
+
+      const compacted = session.getCompactedMessages();
+      // compacted should be [Sum1, Next]
+      expect(compacted.map((m) => m.content)).toEqual(["Sum1", "Next"]);
+
+      // Window limit of 8 tokens allows only "Next"
+      const window = session.getMessageWindow(8, undefined, compacted);
+      expect(window.map((m) => m.content)).toEqual(["Next"]);
+    });
+  });
 });

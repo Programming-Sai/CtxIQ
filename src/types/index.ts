@@ -1,10 +1,12 @@
-export type Role = "user" | "assistant";
+export type Role = "user" | "assistant" | "summary" | "system";
 
 export interface Message {
   id: string;
   role: Role;
   content: string;
+  tokens: number;
   timestamp: number;
+  summaryOf?: Set<string>;
 }
 
 export interface SessionOptions {
