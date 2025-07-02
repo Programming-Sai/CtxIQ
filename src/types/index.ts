@@ -37,4 +37,6 @@ export interface ConversationSessionConfig {
   createdAt: number;
   lastModifiedAt: number;
   sessionName: string;
+  reservePercentage?: number;
+  summeriser?: (msgs: Message[]) => Message;
 }

@@ -1,1 +1,222 @@
-[]
+[
+  {
+    "id": "1",
+    "title": "TS Map preserves insertion order",
+    "tag": "solved",
+    "language": "typescript",
+    "desc": "Learned that Map<string,Message> maintains insertion order, unlike plain objects, ideal for chat history sequencing",
+    "snippet": "private messages: Map<string, Message> = new Map();",
+    "solution-desc": "",
+    "solution-snippet": "",
+    "time-taken": "5m"
+  },
+  {
+    "id": "2",
+    "title": "Dynamic property assignment in TS",
+    "tag": "solved",
+    "language": "typescript",
+    "desc": "Discovered you can assign new fields (message.id = id) at runtime in JS/TS without errors, but types must include them or be cast",
+    "snippet": "message.id = generatedId;",
+    "solution-desc": "",
+    "solution-snippet": "",
+    "time-taken": "4m"
+  },
+  {
+    "id": "3",
+    "title": "messageAdded listener crash when throwing",
+    "tag": "solved",
+    "language": "typescript",
+    "desc": "Found that unhandled errors in EventEmitter listeners crash the process",
+    "snippet": "this.emit('messageAdded', id, message)",
+    "solution-desc": "Wrapped listener code in try/catch to prevent bubble-up",
+    "solution-snippet": "emitter.on('messageAdded', (id,msg)=>{ try{\u2026}catch(e){console.error(e)} });",
+    "time-taken": "8m"
+  },
+  {
+    "id": "4",
+    "title": "Rename replaceMessage\u2192editMessage for clarity",
+    "tag": "solved",
+    "language": "typescript",
+    "desc": "Chose editMessage over replaceMessage to more accurately describe updating an existing message in place",
+    "snippet": "editMessage(id, newMsg)",
+    "solution-desc": "",
+    "solution-snippet": "",
+    "time-taken": "3m"
+  },
+  {
+    "id": "5",
+    "title": "Suppress unused\u2011vars via underscore or ESLint disable",
+    "tag": "solved",
+    "language": "typescript",
+    "desc": "Learned to prefix unused parameters with _ or use eslint-disable-next-line to silence no-unused-vars",
+    "snippet": "// eslint-disable-next-line @typescript-eslint/no-unused-vars",
+    "solution-desc": "",
+    "solution-snippet": "",
+    "time-taken": "5m"
+  },
+  {
+    "id": "6",
+    "title": "Partial<T> makes all fields optional",
+    "tag": "solved",
+    "language": "typescript",
+    "desc": "Used Partial<Message> to stub incomplete Message objects in tests without requiring all fields",
+    "snippet": "const stub: Partial<Message> = { role, content }",
+    "solution-desc": "",
+    "solution-snippet": "",
+    "time-taken": "4m"
+  },
+  {
+    "id": "7",
+    "title": "Array.from works on Map iterators",
+    "tag": "solved",
+    "language": "typescript",
+    "desc": "Realized Array.from(map.values()) returns Message[]; Array.from(map.entries()) returns [id, Message] tuples",
+    "snippet": "Array.from(this.messages.values())",
+    "solution-desc": "",
+    "solution-snippet": "",
+    "time-taken": "4m"
+  },
+  {
+    "id": "8",
+    "title": "clearMessages didn\u2019t clear buffer bug",
+    "tag": "solved",
+    "language": "typescript",
+    "desc": "clearMessages() stub left messages intact, causing tests to fail",
+    "snippet": "clearMessages():void{this.messages.clear()}",
+    "solution-desc": "Implement this.messages.clear() and emit event",
+    "solution-snippet": "clearMessages(){this.messages.clear();this.emit('messagesCleared',this.id)}",
+    "time-taken": "6m"
+  },
+  {
+    "id": "9",
+    "title": "clone() missed copying messages bug",
+    "tag": "solved",
+    "language": "typescript",
+    "desc": "clone() only copied metadata; new session was empty",
+    "snippet": "clone(id,name){return new ConversationSession(...)}",
+    "solution-desc": "Iterate original.messages and set on cloned.messages",
+    "solution-snippet": "for(const [i,m] of this.messages)clone.messages.set(i,{...m});",
+    "time-taken": "7m"
+  },
+  {
+    "id": "10",
+    "title": "Typo in editMessage event name bug",
+    "tag": "solved",
+    "language": "typescript",
+    "desc": "Emitted 'messageEditted' instead of 'messageEdited', listeners never fired",
+    "snippet": "this.emit('messageEditted',...)",
+    "solution-desc": "Corrected event name to 'messageEdited'",
+    "solution-snippet": "this.emit('messageEdited', id, newMsg)",
+    "time-taken": "5m"
+  },
+  {
+    "id": "11",
+    "title": "ESLint & TS config missing modules",
+    "tag": "solved",
+    "language": "javascript",
+    "desc": "Fixed eslint.config.mjs imports by installing @eslint/js, globals, and typescript-eslint plugins to resolve 'module not found'",
+    "snippet": "import js from '@eslint/js'; import globals from 'globals';",
+    "solution-desc": "",
+    "solution-snippet": "",
+    "time-taken": "7m"
+  },
+  {
+    "id": "12",
+    "title": "TSImplicitAny on parameters",
+    "tag": "solved",
+    "language": "typescript",
+    "desc": "Disabled noImplicitAny in tsconfig or added explicit types to function parameters to avoid TS7006 errors",
+    "snippet": "",
+    "solution-desc": "",
+    "solution-snippet": "",
+    "time-taken": "6m"
+  },
+  {
+    "id": "13",
+    "title": "Jest config file extension matters bug",
+    "tag": "solved",
+    "language": "javascript",
+    "desc": "Tests failed until jest.config.js was renamed to jest.config.mjs to match module type",
+    "snippet": "module.exports = {...}",
+    "solution-desc": "Rename file and update test command",
+    "solution-snippet": "jest --config jest.config.mjs",
+    "time-taken": "4m"
+  },
+  {
+    "id": "14",
+    "title": "package.json keywords for npm search",
+    "tag": "solved",
+    "language": "json",
+    "desc": "Learned the 'keywords' field helps npm registry searchability and should list relevant tags",
+    "snippet": "'keywords': ['ai','context']",
+    "solution-desc": "",
+    "solution-snippet": "",
+    "time-taken": "3m"
+  },
+  {
+    "id": "15",
+    "title": "ISC vs MIT license basics",
+    "tag": "solved",
+    "language": "text",
+    "desc": "Learned ISC is a permissive license similar to MIT; you can\u2019t retroactively restrict MIT\u2011licensed code",
+    "snippet": "",
+    "solution-desc": "",
+    "solution-snippet": "",
+    "time-taken": "6m"
+  },
+  {
+    "id": "16",
+    "title": "npm pack & npm publish workflow",
+    "tag": "solved",
+    "language": "shell",
+    "desc": "Practiced npm login, npm pack to preview tarball, and npm publish --access public for initial versions",
+    "snippet": "",
+    "solution-desc": "",
+    "solution-snippet": "",
+    "time-taken": "5m"
+  },
+  {
+    "id": "17",
+    "title": "Use rimraf for clean script",
+    "tag": "solved",
+    "language": "shell",
+    "desc": "Added 'rimraf dist' in clean script to remove compiled files cross\u2011platform",
+    "snippet": "",
+    "solution-desc": "",
+    "solution-snippet": "",
+    "time-taken": "3m"
+  },
+  {
+    "id": "18",
+    "title": "tsconfig include/exclude path issues bug",
+    "tag": "solved",
+    "language": "typescript",
+    "desc": "No inputs found until tsconfig.json include/exclude corrected",
+    "snippet": "'include': ['src/**/*'],'exclude': ['dist']",
+    "solution-desc": "Adjust include paths to match src folder",
+    "solution-snippet": "tsconfig.json include: ['src/**/*']",
+    "time-taken": "5m"
+  },
+  {
+    "id": "19",
+    "title": "Docs platform choice: MkDocs vs Docusaurus",
+    "tag": "pending",
+    "language": "markdown",
+    "desc": "Evaluated MkDocs (Python/Jinja) vs Docusaurus (React) for JS project docs; lean toward Docusaurus for JS injection",
+    "snippet": "",
+    "solution-desc": "",
+    "solution-snippet": "",
+    "time-taken": "8m"
+  },
+  {
+    "id": "20",
+    "title": "Sliding window token logic planning",
+    "tag": "pending",
+    "language": "typescript",
+    "desc": "Drafted getMessageWindow(windowLimit) algorithm: sum tokens, reset at summaries, return token\u2011bounded slice",
+    "snippet": "",
+    "solution-desc": "",
+    "solution-snippet": "",
+    "time-taken": "10m"
+  }
+]

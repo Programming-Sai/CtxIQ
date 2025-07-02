@@ -14,6 +14,8 @@ export class ConversationSession extends EventEmitter {
   private messageCounter = 0;
   public useSequentialIds = false;
   public messageOrder: string[];
+  public SUMMARY_RESERVE_RATIO; // 15% of window
+  public summaryFn?: (msgs: Message[]) => Message; // user‑injected summary hook
 
   constructor(config: ConversationSessionConfig) {
     super();
@@ -24,11 +26,16 @@ export class ConversationSession extends EventEmitter {
     this.messages = new Map();
     this.summaries = new Map();
     this.messageOrder = [];
+    this.SUMMARY_RESERVE_RATIO = config.reservePercentage || 0.15;
+    this.summaryFn = config.summeriser;
   }
 
   addSummary(summary: Message): void {
     const id = this.generateMessageId();
     summary.id = id;
+    summary.role = "summary";
+    summary.tokens =
+      summary.tokens || this.countTokensInMessage(summary.content);
     if (summary.summaryOf && Array.isArray(summary.summaryOf)) {
       summary.summaryOf = new Set(summary.summaryOf);
     }
@@ -62,6 +69,8 @@ export class ConversationSession extends EventEmitter {
     if (this.isSummaryMessage(message)) return this.addSummary(message);
     const id = this.generateMessageId();
     message.id = id;
+    message.tokens =
+      message.tokens || this.countTokensInMessage(message.content);
     this.messages.set(id, message);
     this.messageOrder.push(id);
     this.emit("messageAdded", id, message);
@@ -126,19 +135,64 @@ export class ConversationSession extends EventEmitter {
 
   // ─── Prompt-Building Stubs ──────────────────────────────────────────────────
 
-  buildPrompt(windowTokenLimit?: number) {
-    // get message window
-    // check if number of tokens exceeds token limit
-    // if it does find and follow overflow stategy
-    // Strat 1 (summarisation)
-    // check if there is an existing summary
-    // if there is, replace current window that is not a summary with the new summary, or add the summary to an existing summary
-    // is there is none, then summarise window, add that summary to the messages map, and then use that summary
-    // Strat 2 (truncation)
-    // cut of parts that exceed the window limit and continue, basically simple sliding window apprach, where we are looking for sum k
-    // look into how the `think for longer` feature works on chatgpt, since that seems to be able to take in longer prompts.
-    // or based on user's choice do not cut excess off and just chunk it up and send them in one by one.
-    // after implementing overflow strat, add system prompt if any and send all that to the llm.
+  public buildPrompt(
+    windowTokenLimit: number,
+    fallbackToTruncation: boolean = true,
+  ): Message[] {
+    if (!this.summaryFn) {
+      // no summariser → pure truncation
+      const { fitting } = this.getMessageWindow(windowTokenLimit);
+      return fitting;
+    }
+
+    // 1) reserve summary tokens
+    const reserve = Math.max(
+      1,
+      Math.floor(windowTokenLimit * this.SUMMARY_RESERVE_RATIO),
+    );
+    const usable = windowTokenLimit - reserve;
+
+    // 2) compact all messages
+    const baseList = this.getCompactedMessages();
+
+    // 3) initial fit
+    const { fitting, overflow } = this.getMessageWindow(usable, baseList);
+
+    // 4) no overflow
+    if (overflow.length === 0) return fitting;
+
+    const allCovered = overflow.every((msg) => this.isMessageSummarized(msg));
+
+    if (allCovered) {
+      // Find the latest summary that covers these
+      const existingSummary = Array.from(this.summaries.values()).find((s) =>
+        overflow.every((msg) => s.summaryOf?.has(msg.id)),
+      );
+      if (existingSummary) {
+        return [existingSummary, ...fitting];
+      }
+    }
+
+    // 5) summarise overflow chunk
+    const summaryMsg = this.summaryFn(overflow);
+    summaryMsg.summaryOf = new Set(overflow.map((m) => m.id));
+    summaryMsg.role = "summary";
+
+    // 6) ensure summary fits
+    if (summaryMsg.tokens > reserve) {
+      if (fallbackToTruncation) {
+        const { fitting } = this.getMessageWindow(windowTokenLimit);
+        return fitting;
+      } else {
+        throw new Error(
+          `Summary (${summaryMsg.tokens} tokens) exceeds reserved budget (${reserve})`,
+        );
+      }
+    }
+    this.addSummary(summaryMsg);
+
+    // 7) final prompt = [summary, ...fitting]
+    return [summaryMsg, ...fitting];
   }
   getPromptTokenCount() {}
   truncatePrompt(windowTokenLimit?: number) {}
@@ -176,14 +230,26 @@ export class ConversationSession extends EventEmitter {
       return crypto.randomUUID();
     }
   }
-  countTokensInMessage(message: Message) {}
+
+  countTokensInMessage(message: Message | string): number {
+    return 0;
+  }
   filterMessagesByRole(role: string) {}
 
   getMessageWindow(
     windowTokenLimit: number,
-    overflowStrategy: string = "truncate",
     messages: Message[] = this.getMessages(),
-  ): Message[] {
+  ): { overflow: Message[]; fitting: Message[] } {
+    // let tokenCount = 0;
+    // let l = messages.length; // pointer to the l of the fitting region
+
+    // for (let i = messages.length - 1; i >= 0; i--) {
+    //   const msg = messages[i];
+    //   if (tokenCount + msg.tokens > windowTokenLimit) break;
+    //   tokenCount += msg.tokens;
+    //   l = i;
+    // }
+
     let l = 0;
     let tokenCount = 0;
     for (let r = 0; r < messages.length; r++) {
@@ -193,7 +259,11 @@ export class ConversationSession extends EventEmitter {
         l += 1;
       }
     }
-    return messages.slice(l, messages.length);
+
+    return {
+      overflow: messages.slice(0, l),
+      fitting: messages.slice(l),
+    };
   }
 
   getCompactedMessages(): Message[] {
