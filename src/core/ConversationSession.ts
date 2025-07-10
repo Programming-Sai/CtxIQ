@@ -15,7 +15,8 @@ export class ConversationSession extends EventEmitter {
   public useSequentialIds = false;
   public messageOrder: string[];
   public SUMMARY_RESERVE_RATIO; // 15% of window
-  public summaryFn?: (msgs: Message[]) => Message; // user‑injected summary hook
+  public summaryFn?: (msgs: Message[], reserve: number) => Message; // user‑injected summary hook
+  public windowTokenLimit: number;
 
   constructor(config: ConversationSessionConfig) {
     super();
@@ -28,9 +29,17 @@ export class ConversationSession extends EventEmitter {
     this.messageOrder = [];
     this.SUMMARY_RESERVE_RATIO = config.reservePercentage || 0.15;
     this.summaryFn = config.summeriser;
+    this.windowTokenLimit = 0;
   }
 
   addSummary(summary: Message): void {
+    if (summary.tokens > this.windowTokenLimit) {
+      console.warn(
+        `[CtxIQ] Skipping summary ${summary.id} — too large (${summary.tokens} > ${this.windowTokenLimit})`
+      );
+      return; // Don't store unusable summary
+    }
+
     const id = this.generateMessageId();
     summary.id = id;
     summary.role = "summary";
@@ -40,7 +49,25 @@ export class ConversationSession extends EventEmitter {
       summary.summaryOf = new Set(summary.summaryOf);
     }
     this.summaries.set(id, summary);
-    this.messageOrder.push(id);
+
+    // ⬇️ NEW: Insert summary **after the last message it summarizes**
+    if (summary.summaryOf && summary.summaryOf.size > 0) {
+      const summaryIds = Array.from(summary.summaryOf);
+      const lastIndex = Math.max(
+        ...summaryIds.map((msgId) => this.messageOrder.indexOf(msgId))
+      );
+
+      if (lastIndex >= 0) {
+        this.messageOrder.splice(lastIndex + 1, 0, id);
+      } else {
+        // Fallback: append if something went wrong
+        this.messageOrder.push(id);
+      }
+    } else {
+      // No summaryOf? Just append
+      this.messageOrder.push(id);
+    }
+
     this.emit("summaryAdded", id, summary);
   }
 
@@ -136,25 +163,32 @@ export class ConversationSession extends EventEmitter {
   // ─── Prompt-Building Stubs ──────────────────────────────────────────────────
 
   public buildPrompt(
-    windowTokenLimit: number,
-    fallbackToTruncation: boolean = true,
+    windowTokenLimit: number = this.windowTokenLimit,
+    fallbackToTruncation: boolean = true
   ): Message[] {
     if (!this.summaryFn) {
       // no summariser → pure truncation
-      const { fitting } = this.getMessageWindow(windowTokenLimit);
+      const { fitting } = this.getMessageWindow(
+        windowTokenLimit,
+        this.getCompactedMessages()
+      );
       return fitting;
     }
 
     // 1) reserve summary tokens
     const reserve = Math.max(
       1,
-      Math.floor(windowTokenLimit * this.SUMMARY_RESERVE_RATIO),
+      Math.floor(windowTokenLimit * this.SUMMARY_RESERVE_RATIO)
     );
     const usable = windowTokenLimit - reserve;
 
     // 2) compact all messages
     const baseList = this.getCompactedMessages();
 
+    if (usable <= 0) {
+      // No space left for summary, skip to raw window
+      return this.getMessageWindow(windowTokenLimit, baseList).fitting;
+    }
     // 3) initial fit
     const { fitting, overflow } = this.getMessageWindow(usable, baseList);
 
@@ -166,15 +200,24 @@ export class ConversationSession extends EventEmitter {
     if (allCovered) {
       // Find the latest summary that covers these
       const existingSummary = Array.from(this.summaries.values()).find((s) =>
-        overflow.every((msg) => s.summaryOf?.has(msg.id)),
+        overflow.every((msg) => s.summaryOf?.has(msg.id))
       );
+      // Inside if (allCovered)
       if (existingSummary) {
-        return [existingSummary, ...fitting];
+        if (existingSummary.tokens <= reserve) {
+          return [existingSummary, ...fitting];
+        } else if (fallbackToTruncation) {
+          return this.getMessageWindow(windowTokenLimit, baseList).fitting;
+        } else {
+          throw new Error(
+            `Existing summary (${existingSummary.tokens}) exceeds reserved budget (${reserve})`
+          );
+        }
       }
     }
 
     // 5) summarise overflow chunk
-    const summaryMsg = this.summaryFn(overflow);
+    const summaryMsg = this.summaryFn(overflow, reserve);
     summaryMsg.summaryOf = new Set(overflow.map((m) => m.id));
     summaryMsg.role = "summary";
 
@@ -185,7 +228,7 @@ export class ConversationSession extends EventEmitter {
         return fitting;
       } else {
         throw new Error(
-          `Summary (${summaryMsg.tokens} tokens) exceeds reserved budget (${reserve})`,
+          `Summary (${summaryMsg.tokens} tokens) exceeds reserved budget (${reserve})`
         );
       }
     }
@@ -194,8 +237,9 @@ export class ConversationSession extends EventEmitter {
     // 7) final prompt = [summary, ...fitting]
     return [summaryMsg, ...fitting];
   }
+
   getPromptTokenCount() {}
-  truncatePrompt(windowTokenLimit?: number) {}
+  truncatePrompt(windowTokenLimit: number = this.windowTokenLimit) {}
   summariseAndReplace() {}
 
   // ─── Serialization / Persistence ────────────────────────────────────────────
@@ -237,15 +281,15 @@ export class ConversationSession extends EventEmitter {
   filterMessagesByRole(role: string) {}
 
   getMessageWindow(
-    windowTokenLimit: number,
-    messages: Message[] = this.getMessages(),
+    windowTokenLimit: number = this.windowTokenLimit,
+    messages: Message[] = this.getMessages()
   ): { overflow: Message[]; fitting: Message[] } {
     // let tokenCount = 0;
     // let l = messages.length; // pointer to the l of the fitting region
 
     // for (let i = messages.length - 1; i >= 0; i--) {
     //   const msg = messages[i];
-    //   if (tokenCount + msg.tokens > windowTokenLimit) break;
+    //   if (tokenCount + msg.tokens > this.windowTokenLimit) break;
     //   tokenCount += msg.tokens;
     //   l = i;
     // }
@@ -325,6 +369,8 @@ export class ConversationSession extends EventEmitter {
     this.emit("sessionCloned", cloned);
     return cloned;
   }
+
+  merge() {}
 }
 
 // Note that storage of the messages should be like a transfering jelly from one cup to another.

@@ -5,7 +5,7 @@ import { Message } from "../src/types";
 describe("ConversationSession", () => {
   const makeMessage = (
     role: Message["role"] = "user",
-    content = "Hi!",
+    content = "Hi!"
   ): Partial<Message> => ({
     role,
     content,
@@ -75,6 +75,7 @@ describe("ConversationSession", () => {
     it("should compact messages, excluding those covered by summaries", () => {
       const session = createSession();
       session.useSequentialIds = true;
+      session.windowTokenLimit = 4;
 
       // Add raw messages
       session.addMessage({ role: "user", content: "A", tokens: 1 } as Message);
@@ -98,6 +99,7 @@ describe("ConversationSession", () => {
 
     it("getMessageWindow truncates compacted messages within token limit", () => {
       const session = createSession();
+      session.windowTokenLimit = 8;
       session.useSequentialIds = true;
 
       // Create a sequence and summaries
@@ -145,18 +147,23 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
 
   it("pure truncation when no summaryFn provided", () => {
     const session = createSession();
+    session.windowTokenLimit = 4;
     // 3 messages, each 2 tokens
     session.addMessage({ role: "user", content: "A", tokens: 2 } as Message);
     session.addMessage({ role: "user", content: "B", tokens: 2 } as Message);
     session.addMessage({ role: "user", content: "C", tokens: 2 } as Message);
 
     // window limit 4 tokens → should keep last two
-    const prompt = session.buildPrompt(4, /*fallback*/ false);
+    const prompt = session.buildPrompt(
+      session.windowTokenLimit,
+      /*fallback*/ false
+    );
     expect(prompt.map((m) => m.content)).toEqual(["B", "C"]);
   });
 
   it("inserts summary + fitting messages on overflow", () => {
     const session = createSession();
+    session.windowTokenLimit = 4;
     session.useSequentialIds = true;
 
     // mock countTokens to use the .tokens property
@@ -183,7 +190,10 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
       } as Message);
     }
     // Total tokens = 10. Window limit 4 → usable=3 (after 15% reserve)
-    const prompt = session.buildPrompt(4, /*fallback*/ false);
+    const prompt = session.buildPrompt(
+      session.windowTokenLimit,
+      /*fallback*/ false
+    );
 
     // Expect: summary(M1‐M4) + only M5 (tokens=2)
     expect(prompt.length).toBe(2);
@@ -193,6 +203,7 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
 
   it("reuses existing summary when overflow fully covered", () => {
     const session = createSession();
+    session.windowTokenLimit = 4;
     session.useSequentialIds = true;
 
     // Add messages 1–4
@@ -220,19 +231,18 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
     } as Message);
 
     // Window limit small so overflow=[m1,m2,m3] which is fully covered
-    const prompt = session.buildPrompt(4, /*fallback*/ false);
-
-    console.log(
-      session.getCompactedMessages(),
-      session.messages,
-      session.summaries,
-      prompt,
+    const prompt = session.buildPrompt(
+      session.windowTokenLimit,
+      /*fallback*/ false
     );
+
     expect(prompt[0].content).toBe("PRE_SUM");
   });
 
   it("uses summary over full messages when it fits but originals don't", () => {
     const session = createSession();
+    session.windowTokenLimit = 5;
+    session.useSequentialIds = true;
 
     for (let i = 1; i <= 3; i++) {
       session.addMessage({
@@ -249,12 +259,13 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
       summaryOf: new Set(["msg-1", "msg-2", "msg-3"]),
     } as Message);
 
-    const prompt = session.buildPrompt(5, false);
+    const prompt = session.buildPrompt(session.windowTokenLimit, false);
     expect(prompt.map((m) => m.content)).toEqual(["SUM"]);
   });
 
   it("fallback to pure truncation when summary too large", () => {
     const session = createSession();
+    session.windowTokenLimit = 4;
     session.useSequentialIds = true;
 
     session.summaryFn = (overflow) =>
@@ -275,12 +286,16 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
     }
 
     // window limit 4 => fallback should return last two
-    const prompt = session.buildPrompt(4, /*fallback*/ true);
+    const prompt = session.buildPrompt(
+      session.windowTokenLimit,
+      /*fallback*/ true
+    );
     expect(prompt.map((m) => m.content)).toEqual(["M3", "M4"]);
   });
 
   it("uses existing summary when overflow is fully covered by it", () => {
     const session = createSession();
+    session.windowTokenLimit = 4;
     session.useSequentialIds = true;
 
     // Add M1, M2, M3
@@ -307,11 +322,13 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
       tokens: 2,
     } as Message);
 
-    const prompt = session.buildPrompt(4, false);
+    const prompt = session.buildPrompt(session.windowTokenLimit, false);
     expect(prompt.map((m) => m.content)).toEqual(["SUM123", "M4"]);
   });
+
   it("ignores summary when overflow is not fully covered", () => {
     const session = createSession();
+    session.windowTokenLimit = 4;
     session.useSequentialIds = true;
 
     // Add M1–M4
@@ -331,7 +348,8 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
       summaryOf: new Set(["msg-1", "msg-2"]),
     } as Message);
 
-    const prompt = session.buildPrompt(4, false);
+    const prompt = session.buildPrompt(session.windowTokenLimit, false);
+
     // Expect summary to be skipped because it doesn’t fully cover overflow
     expect(prompt.map((m) => m.content)).toContain("M3");
     expect(prompt.map((m) => m.content)).not.toContain("SUM12");
@@ -339,6 +357,7 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
 
   it("ignores summary when overflow is not fully covered", () => {
     const session = createSession();
+    session.windowTokenLimit = 4;
     session.useSequentialIds = true;
 
     // Add M1–M4
@@ -358,7 +377,7 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
       summaryOf: new Set(["msg-1", "msg-2"]),
     } as Message);
 
-    const prompt = session.buildPrompt(4, false);
+    const prompt = session.buildPrompt(session.windowTokenLimit, false);
     // Expect summary to be skipped because it doesn’t fully cover overflow
     expect(prompt.map((m) => m.content)).toContain("M3");
     expect(prompt.map((m) => m.content)).not.toContain("SUM12");
@@ -366,6 +385,7 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
 
   it("falls back to raw messages when summary is too big", () => {
     const session = createSession();
+    session.windowTokenLimit = 4;
     session.useSequentialIds = true;
 
     // Add M1–M3
@@ -385,7 +405,16 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
       summaryOf: new Set(["msg-1", "msg-2", "msg-3"]),
     } as Message);
 
-    const prompt = session.buildPrompt(4, false);
+    const prompt = session.buildPrompt(session.windowTokenLimit, false);
+
+    // console.log(
+    //   session.getCompactedMessages(),
+    //   session.messages,
+    //   session.summaries,
+    //   session.messageOrder,
+    //   prompt
+    // );
+
     // Summary doesn't fit, should fallback
     expect(prompt.map((m) => m.content)).toContain("M3");
   });
