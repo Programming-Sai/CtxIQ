@@ -35,7 +35,7 @@ export class ConversationSession extends EventEmitter {
   addSummary(summary: Message): void {
     if (summary.tokens > this.windowTokenLimit) {
       console.warn(
-        `[CtxIQ] Skipping summary ${summary.id} — too large (${summary.tokens} > ${this.windowTokenLimit})`
+        `[CtxIQ] Skipping summary ${summary.id} — too large (${summary.tokens} > ${this.windowTokenLimit})`,
       );
       return; // Don't store unusable summary
     }
@@ -54,7 +54,7 @@ export class ConversationSession extends EventEmitter {
     if (summary.summaryOf && summary.summaryOf.size > 0) {
       const summaryIds = Array.from(summary.summaryOf);
       const lastIndex = Math.max(
-        ...summaryIds.map((msgId) => this.messageOrder.indexOf(msgId))
+        ...summaryIds.map((msgId) => this.messageOrder.indexOf(msgId)),
       );
 
       if (lastIndex >= 0) {
@@ -164,13 +164,13 @@ export class ConversationSession extends EventEmitter {
 
   public buildPrompt(
     windowTokenLimit: number = this.windowTokenLimit,
-    fallbackToTruncation: boolean = true
+    fallbackToTruncation: boolean = true,
   ): Message[] {
     if (!this.summaryFn) {
       // no summariser → pure truncation
       const { fitting } = this.getMessageWindow(
         windowTokenLimit,
-        this.getCompactedMessages()
+        this.getCompactedMessages(),
       );
       return fitting;
     }
@@ -178,7 +178,7 @@ export class ConversationSession extends EventEmitter {
     // 1) reserve summary tokens
     const reserve = Math.max(
       1,
-      Math.floor(windowTokenLimit * this.SUMMARY_RESERVE_RATIO)
+      Math.floor(windowTokenLimit * this.SUMMARY_RESERVE_RATIO),
     );
     const usable = windowTokenLimit - reserve;
 
@@ -200,7 +200,7 @@ export class ConversationSession extends EventEmitter {
     if (allCovered) {
       // Find the latest summary that covers these
       const existingSummary = Array.from(this.summaries.values()).find((s) =>
-        overflow.every((msg) => s.summaryOf?.has(msg.id))
+        overflow.every((msg) => s.summaryOf?.has(msg.id)),
       );
       // Inside if (allCovered)
       if (existingSummary) {
@@ -210,7 +210,7 @@ export class ConversationSession extends EventEmitter {
           return this.getMessageWindow(windowTokenLimit, baseList).fitting;
         } else {
           throw new Error(
-            `Existing summary (${existingSummary.tokens}) exceeds reserved budget (${reserve})`
+            `Existing summary (${existingSummary.tokens}) exceeds reserved budget (${reserve})`,
           );
         }
       }
@@ -228,7 +228,7 @@ export class ConversationSession extends EventEmitter {
         return fitting;
       } else {
         throw new Error(
-          `Summary (${summaryMsg.tokens} tokens) exceeds reserved budget (${reserve})`
+          `Summary (${summaryMsg.tokens} tokens) exceeds reserved budget (${reserve})`,
         );
       }
     }
@@ -282,7 +282,7 @@ export class ConversationSession extends EventEmitter {
 
   getMessageWindow(
     windowTokenLimit: number = this.windowTokenLimit,
-    messages: Message[] = this.getMessages()
+    messages: Message[] = this.getMessages(),
   ): { overflow: Message[]; fitting: Message[] } {
     // let tokenCount = 0;
     // let l = messages.length; // pointer to the l of the fitting region

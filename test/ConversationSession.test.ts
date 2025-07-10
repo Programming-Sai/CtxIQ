@@ -5,7 +5,7 @@ import { Message } from "../src/types";
 describe("ConversationSession", () => {
   const makeMessage = (
     role: Message["role"] = "user",
-    content = "Hi!"
+    content = "Hi!",
   ): Partial<Message> => ({
     role,
     content,
@@ -156,7 +156,7 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
     // window limit 4 tokens → should keep last two
     const prompt = session.buildPrompt(
       session.windowTokenLimit,
-      /*fallback*/ false
+      /*fallback*/ false,
     );
     expect(prompt.map((m) => m.content)).toEqual(["B", "C"]);
   });
@@ -192,7 +192,7 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
     // Total tokens = 10. Window limit 4 → usable=3 (after 15% reserve)
     const prompt = session.buildPrompt(
       session.windowTokenLimit,
-      /*fallback*/ false
+      /*fallback*/ false,
     );
 
     // Expect: summary(M1‐M4) + only M5 (tokens=2)
@@ -233,7 +233,7 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
     // Window limit small so overflow=[m1,m2,m3] which is fully covered
     const prompt = session.buildPrompt(
       session.windowTokenLimit,
-      /*fallback*/ false
+      /*fallback*/ false,
     );
 
     expect(prompt[0].content).toBe("PRE_SUM");
@@ -288,7 +288,7 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
     // window limit 4 => fallback should return last two
     const prompt = session.buildPrompt(
       session.windowTokenLimit,
-      /*fallback*/ true
+      /*fallback*/ true,
     );
     expect(prompt.map((m) => m.content)).toEqual(["M3", "M4"]);
   });
