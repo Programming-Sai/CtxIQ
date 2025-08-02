@@ -15,13 +15,6 @@ export interface SessionOptions {
   createdAt?: number;
 }
 
-export interface SessionOptions {
-  id?: string; // Optional — auto-generate if missing
-  title?: string;
-  createdAt?: number;
-  //   metadata?: Record<string, any>; // Optional arbitrary metadata
-}
-
 export interface ConversationSessionData {
   id: string;
   title?: string;
@@ -38,5 +31,24 @@ export interface ConversationSessionConfig {
   lastModifiedAt: number;
   sessionName: string;
   reservePercentage?: number;
-  summeriser?: (msgs: Message[]) => Message;
+  summeriser?: (msgs: Message[], reserve: number) => Message;
+  llmFormatter?: <T>(messages: Message[]) => T[];
+  tokenCounterFn?: (text: string) => number;
+}
+
+export interface SerializedSession {
+  id: string;
+  createdAt: number;
+  lastModifiedAt: number;
+  sessionName: string;
+  reservePercentage: number;
+  windowTokenLimit: number;
+  useSequentialIds: boolean;
+  messageOrder: string[];
+  messages: SerializedMessage[];
+  summaries: SerializedMessage[];
+}
+
+export interface SerializedMessage extends Omit<Message, "summaryOf"> {
+  summaryOf?: string[]; // stored as array for DB compatibility
 }

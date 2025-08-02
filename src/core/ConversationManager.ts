@@ -2,11 +2,65 @@ import { ConversationSession } from "./ConversationSession";
 import { EventEmitter } from "events";
 
 /**
- * Manages multiple conversation sessions.
+ * ConversationManager
  *
- * Supports creating, cloning, deleting, and listing sessions.
- * Emits events on all major operations (e.g., sessionCreated, sessionDeleted).
- * Stores sessions in memory using a Map and tracks the active session.
+ * Orchestrates multiple ConversationSession instances, providing in-memory
+ * lifecycle management, quick lookup, and active-session tracking.
+ *
+ * ### Key Responsibilities
+ * - **Session Creation & Deletion**
+ *   Create new chat sessions or remove existing ones, emitting events for UI or persistence layers.
+ * - **Active Session Management**
+ *   Maintain a “current” session context, automatically reassigning when the active session is deleted.
+ * - **Session Enumeration**
+ *   List, search by name, and retrieve oldest/newest sessions for administrative or UI workflows.
+ * - **Cloning & Bulk Operations**
+ *   Deep-clone individual sessions and clear all sessions with a single call.
+ *
+ * ### Events
+ * - `sessionAdded(id: string, session: ConversationSession)`
+ *   Emitted when an existing session is registered.
+ * - `sessionCreated(id: string, session: ConversationSession)`
+ *   Emitted when a new session is spun up.
+ * - `activeSessionReassigned(newId: string|null, oldId: string|null)`
+ *   Fired whenever the active session is changed or cleared.
+ * - `sessionDeleted(id: string)`
+ *   Emitted after a session is removed.
+ * - `allSessionsCleared()`
+ *   Emitted when every session is purged.
+ * - `sessionCloned(newId: string, clonedSession: ConversationSession)`
+ *   Emitted when a session is deep-cloned.
+ *
+ * ### Extensibility
+ * - Hook into events to synchronize with storage, UI state, or logging systems.
+ * - Swap out the ID generation strategy by overriding `crypto.randomUUID()` at runtime.
+ *
+ * ### Usage
+ * ```ts
+ * const manager = new ConversationManager();
+ *
+ * // Create two sessions
+ * const firstId  = manager.createSession("Support Chat");
+ * const secondId = manager.createSession("Sales Inquiry");
+ *
+ * // Listen for session switches
+ * manager.on("activeSessionReassigned", (newId, oldId) => {
+ *   console.log(`Switched from ${oldId} to ${newId}`);
+ * });
+ *
+ * // Set active by name
+ * const sales = manager.getSessionByName("Sales Inquiry");
+ * if (sales) manager.setActiveSession(sales.id);
+ *
+ * // Clone a session for testing
+ * const cloneId = manager.cloneSession(firstId, "Support Chat (Copy)");
+ *
+ * // Delete the oldest session
+ * const oldest = manager.getOldestSession();
+ * if (oldest) manager.deleteSession(oldest.id);
+ * ```
+ *
+ * @see ConversationSession for per-session message management and prompt building.
  */
 export class ConversationManager extends EventEmitter {
   private sessions = new Map<string, ConversationSession>();

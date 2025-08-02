@@ -418,4 +418,318 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
     // Summary doesn't fit, should fallback
     expect(prompt.map((m) => m.content)).toContain("M3");
   });
+
+  it("always includes system messages at the start of the prompt", () => {
+    const session = createSession();
+    session.windowTokenLimit = 4;
+    session.useSequentialIds = true;
+
+    session.addMessage({
+      role: "system",
+      content: "INIT_SYS",
+      tokens: 0,
+    } as Message);
+    // Add a lot of user/assistant messages...
+    for (let i = 0; i < 50; i++) {
+      session.addMessage({
+        role: "user",
+        content: `msg ${i}`,
+        tokens: 1,
+      } as Message);
+    }
+
+    const llmMsgs = session.getLLMMessages(10);
+
+    // First messages should be all system prompts
+    expect(llmMsgs[0].role).toBe("system");
+    // Should never be summarised or omitted
+    expect(llmMsgs.some((m) => m.role === "system")).toBe(true);
+  });
+});
+
+// Add this block to your existing test/ConversationSession.test.ts
+
+describe("ConversationSession • Additional Edge & Integration Tests", () => {
+  const makeMessage = (
+    role: Message["role"] = "user",
+    content = "Hello",
+    tokens = 1,
+  ): Partial<Message> => ({ role, content, tokens });
+
+  const createSession = () =>
+    new ConversationSession({
+      id: "sess-edge",
+      createdAt: Date.now(),
+      lastModifiedAt: Date.now(),
+      sessionName: "Edge Session",
+    });
+
+  beforeEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("updates lastModifiedAt and emits on add/edit/delete/clear", () => {
+    const session = createSession();
+    const ts0 = session.lastModifiedAt;
+
+    // addMessage
+    const addSpy = jest.fn();
+    session.on("messageAdded", addSpy);
+    session.addMessage(makeMessage() as Message);
+    expect(session.lastModifiedAt).toBeGreaterThan(ts0);
+    expect(addSpy).toHaveBeenCalled();
+
+    // editMessage
+    const msg = session.getMessages()[0];
+    const editSpy = jest.fn();
+    session.on("messageEdited", editSpy);
+    const ts1 = session.lastModifiedAt;
+    session.editMessage(msg.id!, { ...msg, content: "X" } as Message);
+    expect(session.lastModifiedAt).toBeGreaterThan(ts1);
+    expect(editSpy).toHaveBeenCalled();
+
+    // deleteMessage
+    const delSpy = jest.fn();
+    session.on("messageDeleted", delSpy);
+    const ts2 = session.lastModifiedAt;
+    session.deleteMessage(msg.id!);
+    expect(session.lastModifiedAt).toBeGreaterThan(ts2);
+    expect(delSpy).toHaveBeenCalledWith(msg.id, true);
+
+    // clearMessages
+    session.addMessage(makeMessage() as Message);
+    const clearSpy = jest.fn();
+    session.on("messagesCleared", clearSpy);
+    const ts3 = session.lastModifiedAt;
+    session.clearMessages();
+    expect(session.lastModifiedAt).toBeGreaterThan(ts3);
+    expect(clearSpy).toHaveBeenCalled();
+  });
+
+  it("serializes and deserializes to identical state via toJSON/fromJSON", () => {
+    const session = createSession();
+    session.useSequentialIds = true;
+    session.windowTokenLimit = 10;
+    session.addMessage({ role: "user", content: "A", tokens: 1 } as Message);
+    session.addSummary({
+      role: "summary",
+      content: "S",
+      tokens: 1,
+      summaryOf: new Set([session.getMessages()[0].id!]),
+    } as Message);
+
+    const data = session.toJSON();
+    const clone = createSession();
+    clone.fromJSON(data);
+    // deep comparison of critical fields
+    expect(clone.id).toBe(session.id);
+    expect(clone.sessionName).toBe(session.sessionName);
+    expect(clone.getMessages().map((m) => m.content)).toEqual(
+      session.getMessages().map((m) => m.content),
+    );
+    expect(clone.getSummaries().map((s) => s.content)).toEqual(
+      session.getSummaries().map((s) => s.content),
+    );
+    expect(clone.messageOrder).toEqual(session.messageOrder);
+  });
+
+  it("honors a custom tokenCounterFn and falls back when it errors", () => {
+    const session = createSession();
+    // custom counter that returns length of string
+    session.tokenCounterFn = (txt) => txt.length;
+    expect(session.countTokensInMessage("abc def")).toBe(7);
+    // custom counter that throws
+    session.tokenCounterFn = () => {
+      throw new Error();
+    };
+    expect(session.countTokensInMessage("one two")).toBe(2);
+  });
+
+  it("throws if llmFormatter returns non-array", () => {
+    const session = createSession();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    session.llmFormatter = <T>(_: Message[]) => ({}) as unknown as T[];
+    session.addMessage({ role: "user", content: "X", tokens: 1 } as Message);
+    expect(() => session.getLLMMessages()).toThrow(
+      /llmFormatter must return an array/,
+    );
+  });
+
+  it("setSummaries replaces old set and clearSummaries empties it", () => {
+    const session = createSession();
+    session.useSequentialIds = true;
+    // initial summaries
+    session.addSummary({
+      role: "summary",
+      content: "Old",
+      tokens: 1,
+      summaryOf: new Set(),
+    } as Message);
+    expect(session.getSummaries()).toHaveLength(1);
+
+    // replace with two new
+    const s1: Message = {
+      id: "s1",
+      role: "summary",
+      content: "A",
+      tokens: 1,
+      timestamp: Date.now(),
+      summaryOf: new Set(),
+    };
+    const s2: Message = {
+      id: "s2",
+      role: "summary",
+      content: "B",
+      tokens: 1,
+      timestamp: Date.now(),
+      summaryOf: new Set(),
+    };
+    session.setSummaries([s1, s2]);
+    expect(session.getSummaries().map((s) => s.content)).toEqual(["A", "B"]);
+
+    // clear summaries
+    session.clearSummaries();
+    expect(session.getSummaries()).toHaveLength(0);
+  });
+
+  it("getFirstMessage and getLastMessage behave correctly", () => {
+    const session = createSession();
+    expect(session.getFirstMessage()).toBeUndefined();
+    expect(session.getLastMessage()).toBeUndefined();
+
+    session.addMessage({
+      role: "user",
+      content: "First",
+      tokens: 1,
+    } as Message);
+    session.addMessage({ role: "user", content: "Last", tokens: 1 } as Message);
+
+    expect(session.getFirstMessage()?.content).toBe("First");
+    expect(session.getLastMessage()?.content).toBe("Last");
+  });
+
+  it("clone produces an independent copy", () => {
+    const session = createSession();
+    session.addMessage({ role: "user", content: "Orig", tokens: 1 } as Message);
+    const clone = session.clone("new-id", "New Name");
+
+    // mutate clone
+    clone.addMessage({
+      role: "user",
+      content: "CloneOnly",
+      tokens: 1,
+    } as Message);
+    expect(clone.getMessages().map((m) => m.content)).toContain("CloneOnly");
+    // original should not have that
+    expect(session.getMessages().map((m) => m.content)).not.toContain(
+      "CloneOnly",
+    );
+  });
+
+  it("hasMessages and hasSummaryOverflowed reflect session state", () => {
+    const session = createSession();
+    expect(session.hasMessages()).toBe(false);
+    expect(session.hasSummaryOverflowed()).toBe(false);
+
+    session.addMessage({ role: "user", content: "X", tokens: 1 } as Message);
+    expect(session.hasMessages()).toBe(true);
+
+    session.addSummary({
+      role: "summary",
+      content: "S",
+      tokens: 1,
+      summaryOf: new Set([session.getMessages()[0].id!]),
+    } as Message);
+    expect(session.hasSummaryOverflowed()).toBe(true);
+  });
+
+  it("merge() always throws not implemented", () => {
+    const session = createSession();
+    expect(() => session.merge()).toThrow(/not implemented/);
+  });
+
+  it("removes references and drops empty summaries when deleting summarized messages", () => {
+    const session = createSession();
+    session.useSequentialIds = true;
+
+    // create a message and a summary of it
+    session.addMessage({ role: "user", content: "X", tokens: 1 } as Message);
+    const msgId = session.getMessages()[0].id!;
+    session.addSummary({
+      role: "summary",
+      content: "S",
+      tokens: 1,
+      summaryOf: new Set([msgId]),
+    } as Message);
+
+    expect(session.getSummaries()).toHaveLength(1);
+
+    // delete the original message — summary should auto-delete
+    session.deleteMessage(msgId);
+    expect(session.getSummaries()).toHaveLength(0);
+  });
+
+  it("never drops system prompts from a built prompt, even under heavy truncation", () => {
+    const session = createSession();
+    session.windowTokenLimit = 1;
+    session.useSequentialIds = true;
+
+    // add a system prompt and a normal message
+    session.addMessage({
+      role: "system",
+      content: "SYS",
+      tokens: 1,
+    } as Message);
+    session.addMessage({ role: "user", content: "U", tokens: 1 } as Message);
+
+    const prompt = session.buildPrompt(1, true);
+    expect(prompt[0].role).toBe("system");
+    expect(prompt.some((m) => m.role === "system")).toBe(true);
+  });
+
+  it("correctly filters messages by role", () => {
+    const session = createSession();
+    session.addMessage({ role: "user", content: "A", tokens: 1 } as Message);
+    session.addMessage({
+      role: "assistant",
+      content: "B",
+      tokens: 1,
+    } as Message);
+    session.addMessage({ role: "system", content: "C", tokens: 1 } as Message);
+
+    expect(
+      session.filterMessagesByRole("assistant").map((m) => m.content),
+    ).toEqual(["B"]);
+  });
+
+  it("preserves summaryOf sets through toJSON/fromJSON", () => {
+    const session = createSession();
+    session.useSequentialIds = true;
+    session.addMessage({ role: "user", content: "M", tokens: 1 } as Message);
+    const id = session.getMessages()[0].id!;
+    session.addSummary({
+      role: "summary",
+      content: "S",
+      tokens: 1,
+      summaryOf: new Set([id]),
+    } as Message);
+
+    const json = session.toJSON();
+    const loaded = createSession();
+    loaded.fromJSON(json);
+
+    const restoredSummary = loaded.getSummaries()[0]!;
+    expect(restoredSummary.summaryOf).toBeInstanceOf(Set);
+    expect(Array.from(restoredSummary.summaryOf!)).toEqual([id]);
+  });
+
+  it("allows a correctly-typed llmFormatter to reshape messages", () => {
+    const session = createSession();
+    session.llmFormatter = <T>(msgs: Message[]) =>
+      msgs.map((m) => ({ text: m.content, role: m.role })) as unknown as T[];
+    session.addMessage({ role: "user", content: "OK", tokens: 1 } as Message);
+
+    const out = session.getLLMMessages<{ text: string; role: string }>();
+    expect(out[0]).toEqual({ text: "OK", role: "user" });
+  });
 });
