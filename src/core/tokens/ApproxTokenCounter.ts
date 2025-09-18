@@ -5,7 +5,7 @@ import { TokenCountOptions, TokenMetadata } from "./TokenManagerTypes";
 export class ApproxTokenCounter extends BaseTokenManager {
   protected async computeTokens(
     input: string | Message[],
-    options?: TokenCountOptions
+    options?: TokenCountOptions,
   ): Promise<TokenMetadata> {
     const includeRoles = options?.includeRoles ?? true;
 
@@ -14,7 +14,7 @@ export class ApproxTokenCounter extends BaseTokenManager {
           .map((msg) =>
             includeRoles
               ? `role:${msg?.role}: content: ${msg?.content}`
-              : `${msg?.content}`
+              : `${msg?.content}`,
           )
           .join("\n")
       : input;

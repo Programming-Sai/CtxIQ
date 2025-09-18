@@ -28,7 +28,7 @@ export interface TokenManager {
   initialize?(config?: TokenManagerConfig): void;
   count(
     input: string | Message[],
-    options?: TokenCountOptions
+    options?: TokenCountOptions,
   ): Promise<TokenMetadata>;
   getMetadata?(): TokenMetadata | null;
 }

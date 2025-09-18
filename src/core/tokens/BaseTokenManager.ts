@@ -16,7 +16,7 @@ export abstract class BaseTokenManager implements TokenManager {
 
   async count(
     input: string | Message[],
-    options?: TokenCountOptions
+    options?: TokenCountOptions,
   ): Promise<TokenMetadata> {
     const metadata = await this.computeTokens(input, options);
     this.lastMetadata = metadata;
@@ -29,6 +29,6 @@ export abstract class BaseTokenManager implements TokenManager {
 
   protected abstract computeTokens(
     input: string | Message[],
-    options?: TokenCountOptions
+    options?: TokenCountOptions,
   ): Promise<TokenMetadata>;
 }

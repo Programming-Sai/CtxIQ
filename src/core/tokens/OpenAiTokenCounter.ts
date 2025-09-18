@@ -15,7 +15,7 @@ export class OpenAiTokenCounter extends BaseTokenManager {
 
   protected async computeTokens(
     input: string | Message[],
-    options?: TokenCountOptions
+    options?: TokenCountOptions,
   ): Promise<TokenMetadata> {
     const includeRoles = options?.includeRoles ?? true;
 
@@ -49,7 +49,7 @@ export class OpenAiTokenCounter extends BaseTokenManager {
       // log error and fallback to approx
       console.warn(
         "OpenAiTokenCounter: fallback to approximate counter due to:",
-        err
+        err,
       );
 
       const approx = new ApproxTokenCounter();
