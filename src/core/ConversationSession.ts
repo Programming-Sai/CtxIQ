@@ -107,7 +107,7 @@ export class ConversationSession extends EventEmitter {
   addSummary(summary: Message): void {
     if (this.windowTokenLimit > 0 && summary.tokens > this.windowTokenLimit) {
       console.warn(
-        `[CtxIQ] Skipping summary ${summary.id} — too large (${summary.tokens} > ${this.windowTokenLimit})`,
+        `[CtxIQ] Skipping summary ${summary.id} — too large (${summary.tokens} > ${this.windowTokenLimit})`
       );
       return; // Don't store unusable summary
     }
@@ -126,7 +126,7 @@ export class ConversationSession extends EventEmitter {
     if (summary.summaryOf && summary.summaryOf.size > 0) {
       const summaryIds = Array.from(summary.summaryOf);
       const lastIndex = Math.max(
-        ...summaryIds.map((msgId) => this.messageOrder.indexOf(msgId)),
+        ...summaryIds.map((msgId) => this.messageOrder.indexOf(msgId))
       );
 
       if (lastIndex >= 0) {
@@ -213,7 +213,7 @@ export class ConversationSession extends EventEmitter {
   setSummaries(summaries: Message[]): void {
     // Remove old summaries from order
     this.messageOrder = this.messageOrder.filter(
-      (id) => !this.summaries.has(id),
+      (id) => !this.summaries.has(id)
     );
     this.summaries.clear();
 
@@ -238,7 +238,7 @@ export class ConversationSession extends EventEmitter {
   clearSummaries(): void {
     // Remove all summary IDs from messageOrder
     this.messageOrder = this.messageOrder.filter(
-      (id) => !this.summaries.has(id),
+      (id) => !this.summaries.has(id)
     );
 
     this.summaries.clear();
@@ -378,7 +378,7 @@ export class ConversationSession extends EventEmitter {
    */
   public buildPrompt(
     windowTokenLimit: number = this.windowTokenLimit,
-    fallbackToTruncation: boolean = true,
+    fallbackToTruncation: boolean = true
   ): Message[] {
     // 1. Extract all system messages from compacted list
     const allMessages = this.getCompactedMessages();
@@ -388,7 +388,7 @@ export class ConversationSession extends EventEmitter {
     // 2. Calculate token cost for system messages
     const systemTokenCount = systemMessages.reduce(
       (sum, m) => sum + m.tokens,
-      0,
+      0
     );
 
     // 3. Adjust available token limit
@@ -398,7 +398,7 @@ export class ConversationSession extends EventEmitter {
     if (!this.summaryFn) {
       const { fitting } = this.getMessageWindow(
         remainingLimit,
-        nonSystemMessages,
+        nonSystemMessages
       );
       return [...systemMessages, ...fitting];
     }
@@ -406,7 +406,7 @@ export class ConversationSession extends EventEmitter {
     // 5. Reserve space for summaries from the remaining limit
     const reserve = Math.max(
       1,
-      Math.floor(remainingLimit * this.SUMMARY_RESERVE_RATIO),
+      Math.floor(remainingLimit * this.SUMMARY_RESERVE_RATIO)
     );
     const usable = remainingLimit - reserve;
 
@@ -418,7 +418,7 @@ export class ConversationSession extends EventEmitter {
     // 6. Fit as many non-system messages as possible
     const { fitting, overflow } = this.getMessageWindow(
       usable,
-      nonSystemMessages,
+      nonSystemMessages
     );
 
     // 7. If no overflow, we’re done
@@ -430,7 +430,7 @@ export class ConversationSession extends EventEmitter {
     const allCovered = overflow.every((msg) => this.isMessageSummarized(msg));
     if (allCovered) {
       const existingSummary = Array.from(this.summaries.values()).find((s) =>
-        overflow.every((msg) => s.summaryOf?.has(msg.id)),
+        overflow.every((msg) => s.summaryOf?.has(msg.id))
       );
       if (existingSummary) {
         if (existingSummary.tokens <= reserve) {
@@ -442,7 +442,7 @@ export class ConversationSession extends EventEmitter {
           ];
         } else {
           throw new Error(
-            `Existing summary (${existingSummary.tokens}) exceeds reserved budget (${reserve})`,
+            `Existing summary (${existingSummary.tokens}) exceeds reserved budget (${reserve})`
           );
         }
       }
@@ -451,7 +451,7 @@ export class ConversationSession extends EventEmitter {
     // 9. Summarise overflow without touching system messages
     const summaryMsg = this.summaryFn(
       overflow.filter((m) => m.role !== "system"),
-      reserve,
+      reserve
     );
     summaryMsg.summaryOf = new Set(overflow.map((m) => m.id));
     summaryMsg.role = "summary";
@@ -460,12 +460,12 @@ export class ConversationSession extends EventEmitter {
       if (fallbackToTruncation) {
         const { fitting } = this.getMessageWindow(
           remainingLimit,
-          nonSystemMessages,
+          nonSystemMessages
         );
         return [...systemMessages, ...fitting];
       } else {
         throw new Error(
-          `Summary (${summaryMsg.tokens} tokens) exceeds reserved budget (${reserve})`,
+          `Summary (${summaryMsg.tokens} tokens) exceeds reserved budget (${reserve})`
         );
       }
     }
@@ -593,7 +593,7 @@ export class ConversationSession extends EventEmitter {
    * @throws {Error} If `llmFormatter` returns a non-array value.
    */
   getLLMMessages<T = { role: string; content: string }>(
-    windowSize: number = this.windowTokenLimit,
+    windowSize: number = this.windowTokenLimit
   ): T[] {
     const promptMessages = this.buildPrompt(windowSize);
 
@@ -691,7 +691,7 @@ export class ConversationSession extends EventEmitter {
    */
   getMessageWindow(
     windowTokenLimit: number = this.windowTokenLimit,
-    messages: Message[] = this.getMessages(),
+    messages: Message[] = this.getMessages()
   ): { overflow: Message[]; fitting: Message[] } {
     // let tokenCount = 0;
     // let l = messages.length; // pointer to the l of the fitting region
