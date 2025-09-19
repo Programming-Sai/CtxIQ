@@ -16,38 +16,50 @@
 Expect frequent updates and breaking changes until the first stable release.  
 Follow for progress or contribute!
 
-```ftt
-<...>/Projects\CtxIQ> ftt
+```mermaid
+flowchart TD
+  subgraph Core
+    CM["ConversationManager"]
+    CS["ConversationSession (one session)"]
+    TM["TokenManager (ApproxTokenCounter / optional tiktoken)"]
+    BP["buildPrompt() / summaryFn (async)"]
+    LC["LLMCaller (MockLLMCaller / future adapters)"]
+    PM["Prompt Messages"]
+    AR["Assistant Reply"]
+  end
 
+  subgraph Persistence["Optional Persistence Adapters"]
+    JSON["JsonFileAdapter (server)"]
+    LS["LocalStorageAdapter (browser)"]
+  end
 
-./CtxIQ/*
-        ├─ .github/*
-        |       └─ workflows/*
-        |               └─ ci.yml
-        ├─ dist/*
-        |       └─ index.js
-        ├─ src/*
-        |       └─ index.ts
-        ├─ test/*
-        |       └─ sanity.test.ts
-        ├─ .fttignore
-        ├─ .gitignore
-        ├─ .prettierignore
-        ├─ .tracker.json
-        ├─ eslint.config.mjs
-        ├─ jest.config.mjs
-        ├─ package-lock.json
-        ├─ package.json
-        ├─ README.md
-        └─ tsconfig.json
+  %% Main orchestration flow
+  CM -->|creates loads lists sessions| CS
+  CS -->|stores messages summaries| TM
+  CS -->|calls| BP
+  BP -->|produces| PM
+  PM -->|count tokens| TM
+  PM -->|sent to| LC
+  LC -->|returns| AR
+  AR -->|added to session| CS
 
-<...>/Projects\CtxIQ>
-```
+  %% Persistence controlled by Manager
+  CM -->|save/load session toJSON fromJSON| JSON
+  CM -->|save/load session toJSON fromJSON| LS
+  CS -->|toJSON fromJSON| CM
 
-# Session persistence flow
+  %% Notes with real line breaks
+  TM_note["<p align="left"><b>TokenManager</b> used to:<br/>- estimate prompt tokens<br/>- reserve space for summaries<br/>- optionally use tiktoken (lazy-loaded)<p/>"]:::note
 
-```txt
-User sends a message → Manager finds the session → Session adds the messages → Session emits "messageAdded" → User’s listener or hook persists session to disk or DB
+  LC_note["<p align="left"><b>LLMCaller</b> is pluggable:<br/>- MockLLMCaller (tests & demo)<br/>- adapters (OpenAI/Groq/etc) to be added later<br/>- summaryFn runs via LLMCaller (async)<p/>"]:::note
+
+  CM_note["<p align="left"><b>ConversationManager</b> responsibilities:<br/>- create/load/save/delete sessions<br/>- choose storage adapter<br/>- provide global config (token budgets, defaults)<br/>- wire TokenManager and LLMCaller instances<p/>"]:::note
+
+  TM -.-> TM_note
+  LC -.-> LC_note
+  CM -.-> CM_note
+
+  classDef note fill:#f9f,stroke:#333,stroke-width:1px,color:#333;
 
 ```
 
