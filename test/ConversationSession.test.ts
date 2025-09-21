@@ -547,7 +547,6 @@ describe("ConversationSession • Additional Edge & Integration Tests", () => {
 
   it("throws if llmFormatter returns non-array", () => {
     const session = createSession();
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     session.llmFormatter = <T>(_: Message[]) => ({}) as unknown as T[];
     session.addMessage({ role: "user", content: "X", tokens: 1 } as Message);
     expect(() => session.getLLMMessages()).toThrow(

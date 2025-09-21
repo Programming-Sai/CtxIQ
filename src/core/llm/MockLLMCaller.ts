@@ -35,7 +35,6 @@ export class MockLLMCaller extends BaseLLMCaller {
    */
   constructor(
     private replyPrefix: string = "Mock reply: ",
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     opts: LLMConfig,
   ) {
     super();

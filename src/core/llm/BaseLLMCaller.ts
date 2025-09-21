@@ -56,7 +56,6 @@ export abstract class BaseLLMCaller implements LLMCallerType {
    * @param {CallOptions} [options] - call options
    * @yields {AsyncIterable<LLMStreamChunk>}
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async *stream<TIn = unknown, TOut = unknown>(
     messages: TIn[],
     options?: CallOptions,
