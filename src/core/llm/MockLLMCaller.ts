@@ -5,21 +5,52 @@ import type { CallOptions, LLMResponse, LLMStreamChunk } from "./LLMTypes";
 
 /**
  * MockLLMCaller
- * Deterministic mock for tests and local development.
- * - call() returns a simple deterministic reply (prefix + last user content).
- * - stream() yields the reply in small chunks (words).
  *
- * Use this in unit/integration tests to avoid real network calls.
+ * Deterministic, dependency-free mock LLM adapter meant for tests and local development.
+ * Behaviour:
+ * - `call()` returns a deterministic reply: `replyPrefix + <last relevant message content>`.
+ * - The returned `LLMResponse` includes `text`, an approximate `tokensUsed`, `usage`, `model`
+ *   (from options if provided), and a minimal `raw` payload for assertions.
+ * - `stream()` yields the `text` response split into word tokens (one chunk per word),
+ *   followed by a final "info" chunk `{ finished: true }`.
+ *
+ * Use this in unit and integration tests to avoid network calls and to get predictable outputs.
  */
 export class MockLLMCaller extends BaseLLMCaller {
+  /** Adapter name */
   name = "mock";
+
+  /** Capabilities descriptor: this mock supports streaming (word chunks). */
   capabilities = { streaming: true };
 
-  // replyPrefix is configurable for tests
-  constructor(private replyPrefix = "Mock reply: ") {
+  /**
+   * Create a new MockLLMCaller.
+   *
+   * @param {string} [replyPrefix="Mock reply: "] - prefix used for the deterministic reply text.
+   *
+   * @example
+   * const mock = new MockLLMCaller('TestPrefix: ');
+   * const res = await mock.call([{role: 'user', content: 'hi'}]);
+   * // res.text === 'TestPrefix: hi'
+   */
+  constructor(private replyPrefix: string = "Mock reply: ") {
     super();
   }
 
+  /**
+   * call
+   *
+   * Produce a deterministic LLMResponse based on the last user/system/assistant message.
+   *
+   * @param {Message[]} messages - conversation messages to inspect
+   * @param {CallOptions} [_options] - optional call options (model may be returned in response)
+   * @returns {Promise<LLMResponse>} resolves to an object containing:
+   *   - text: the reply string
+   *   - tokensUsed: approximate token count
+   *   - usage: { totalTokens: number }
+   *   - model: forwarded from options (if present)
+   *   - raw: a small object useful for assertions in tests
+   */
   async call(
     messages: Message[],
     _options?: CallOptions,
@@ -46,6 +77,17 @@ export class MockLLMCaller extends BaseLLMCaller {
     };
   }
 
+  /**
+   * stream
+   *
+   * Stream the deterministic reply by splitting on whitespace and yielding
+   * each word as a separate chunk. After all words are yielded, emit an
+   * "info" chunk indicating the stream finished.
+   *
+   * @param {Message[]} messages - messages to use when building the reply
+   * @param {CallOptions} [_options] - optional call options
+   * @yields {AsyncIterable<LLMStreamChunk>} word chunks, then final info chunk
+   */
   async *stream(
     messages: Message[],
     _options?: CallOptions,

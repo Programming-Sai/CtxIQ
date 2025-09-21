@@ -8,11 +8,50 @@ import {
 import { ApproxTokenCounter } from "./ApproxTokenCounter";
 import type { TiktokenModel } from "@dqbd/tiktoken";
 
+/**
+ * OpenAiTokenCounter
+ *
+ * Token counter that attempts to use `@dqbd/tiktoken` for precise counts.
+ * - Uses dynamic import to avoid bundling the native dependency in browser builds.
+ * - If tiktoken is unavailable or an error occurs, it falls back to `ApproxTokenCounter`.
+ *
+ * NOTE: this class expects that `TokenManagerConfig.model` (optional) may contain a
+ * model identifier used by the tiktoken API (e.g. "gpt-4"). If tiktoken is not installed,
+ * the fallback will be used automatically.
+ */
 export class OpenAiTokenCounter extends BaseTokenManager {
+  /**
+   * initialize
+   *
+   * Optionally perform asynchronous initialization. Currently this forwards to the base
+   * initializer but is `async` to allow subclasses or future changes to perform async
+   * warm-up (e.g. preloading an encoding).
+   *
+   * @param {TokenManagerConfig} [config] - optional configuration (e.g. model)
+   * @returns {Promise<void>}
+   */
   async initialize(config?: TokenManagerConfig): Promise<void> {
     super.initialize(config);
   }
 
+  /**
+   * computeTokens
+   *
+   * Attempt to compute token counts using `@dqbd/tiktoken`.
+   * - Builds a single text string from either the input string or Message[].
+   * - Dynamically imports tiktoken and calls `encoding_for_model` / `get_encoding`.
+   * - If tiktoken succeeds, returns `TokenMetadata` with method `"tiktoken"`.
+   * - On any error, logs a warning and delegates to `ApproxTokenCounter` as fallback.
+   *
+   * @param {string | Message[]} input - text or messages to count
+   * @param {TokenCountOptions} [options] - counting options (includeRoles etc.)
+   * @returns {Promise<TokenMetadata>}
+   *
+   * @example
+   * const t = new OpenAiTokenCounter();
+   * await t.initialize({ model: 'gpt-4' });
+   * const meta = await t.count('hello world');
+   */
   protected async computeTokens(
     input: string | Message[],
     options?: TokenCountOptions,
