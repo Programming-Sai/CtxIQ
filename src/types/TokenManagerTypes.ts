@@ -1,4 +1,4 @@
-import { Message } from "../../types";
+import { Message } from ".";
 
 export type TokenMetadata = {
   tokens: number;

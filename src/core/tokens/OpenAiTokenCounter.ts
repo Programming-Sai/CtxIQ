@@ -4,7 +4,7 @@ import {
   TokenCountOptions,
   TokenMetadata,
   TokenManagerConfig,
-} from "./TokenManagerTypes";
+} from "../../types/TokenManagerTypes";
 import { ApproxTokenCounter } from "./ApproxTokenCounter";
 import type { TiktokenModel } from "@dqbd/tiktoken";
 

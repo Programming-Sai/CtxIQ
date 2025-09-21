@@ -1,7 +1,11 @@
 // src/core/llm/MockLLMCaller.ts
 import { BaseLLMCaller } from "./BaseLLMCaller";
 import type { Message } from "../../types";
-import type { CallOptions, LLMConfig, LLMStreamChunk } from "./LLMTypes";
+import type {
+  CallOptions,
+  LLMConfig,
+  LLMStreamChunk,
+} from "../../types/LLMTypes";
 
 /**
  * MockLLMCaller

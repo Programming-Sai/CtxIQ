@@ -3,7 +3,7 @@ import type {
   LLMCaller as LLMCallerType,
   CallOptions,
   LLMStreamChunk,
-} from "./LLMTypes";
+} from "../../types/LLMTypes";
 
 /**
  * BaseLLMCaller

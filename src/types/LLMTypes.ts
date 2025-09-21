@@ -1,5 +1,6 @@
 // src/core/llm/types.ts
-import { Message } from "../../types";
+
+import { Message } from ".";
 
 /**
  * Options passed to an LLM adapter call.

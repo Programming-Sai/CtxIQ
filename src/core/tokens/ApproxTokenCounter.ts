@@ -1,6 +1,9 @@
 import { Message } from "../../types";
 import { BaseTokenManager } from "./BaseTokenManager";
-import { TokenCountOptions, TokenMetadata } from "./TokenManagerTypes";
+import {
+  TokenCountOptions,
+  TokenMetadata,
+} from "../../types/TokenManagerTypes";
 
 /**
  * ApproxTokenCounter

@@ -4,7 +4,7 @@ import {
   TokenManagerConfig,
   TokenCountOptions,
   TokenMetadata,
-} from "./TokenManagerTypes";
+} from "../../types/TokenManagerTypes";
 
 /**
  * BaseTokenManager
