@@ -547,6 +547,23 @@ export class ConversationSession extends EventEmitter {
     this.emit("sessionLoaded", this.id);
   }
 
+  static fromJSON(
+    obj: SerializedSession,
+    configOverrides?: Partial<ConversationSessionConfig>,
+  ): ConversationSession {
+    const s = new ConversationSession({
+      ...configOverrides,
+      id: obj.id, // important: use persisted id
+      createdAt: obj.createdAt,
+      lastModifiedAt: obj.lastModifiedAt,
+      sessionName: obj.sessionName,
+      reservePercentage: obj.reservePercentage,
+      // Any callbacks like tokenCounterFn/llmFormatter can come from configOverrides
+    });
+    s.fromJSON(obj);
+    return s;
+  }
+
   // ─── Summary Helpers & System Prompt ───────────────────────────────────────
 
   /**
