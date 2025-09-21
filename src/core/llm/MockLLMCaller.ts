@@ -1,7 +1,7 @@
 // src/core/llm/MockLLMCaller.ts
-import { BaseLLMCaller } from "./BaseLLMCaller ";
+import { BaseLLMCaller } from "./BaseLLMCaller";
 import type { Message } from "../../types";
-import type { CallOptions, LLMResponse, LLMStreamChunk } from "./LLMTypes";
+import type { CallOptions, LLMConfig, LLMStreamChunk } from "./LLMTypes";
 
 /**
  * MockLLMCaller
@@ -33,7 +33,11 @@ export class MockLLMCaller extends BaseLLMCaller {
    * const res = await mock.call([{role: 'user', content: 'hi'}]);
    * // res.text === 'TestPrefix: hi'
    */
-  constructor(private replyPrefix: string = "Mock reply: ") {
+  constructor(
+    private replyPrefix: string = "Mock reply: ",
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    opts: LLMConfig,
+  ) {
     super();
   }
 
@@ -51,12 +55,14 @@ export class MockLLMCaller extends BaseLLMCaller {
    *   - model: forwarded from options (if present)
    *   - raw: a small object useful for assertions in tests
    */
-  async call(
-    messages: Message[],
+  async call<TIn = unknown, TOut = unknown>(
+    messages: TIn[],
     _options?: CallOptions,
-  ): Promise<LLMResponse> {
+  ): Promise<TOut> {
     // find last user-like content (user then system then assistant fallback)
-    const last = [...messages]
+    const msgs = messages as unknown as Message[];
+
+    const last = [...msgs]
       .reverse()
       .find(
         (m) =>
@@ -74,7 +80,7 @@ export class MockLLMCaller extends BaseLLMCaller {
       usage,
       model: _options?.model,
       raw: { messagesLength: messages.length },
-    };
+    } as unknown as TOut;
   }
 
   /**
@@ -88,13 +94,16 @@ export class MockLLMCaller extends BaseLLMCaller {
    * @param {CallOptions} [_options] - optional call options
    * @yields {AsyncIterable<LLMStreamChunk>} word chunks, then final info chunk
    */
-  async *stream(
-    messages: Message[],
+  async *stream<TIn = unknown, TOut = unknown>(
+    messages: TIn[],
     _options?: CallOptions,
   ): AsyncIterable<LLMStreamChunk> {
-    const res = await this.call(messages, _options);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = (await this.call<TIn, TOut>(messages, _options)) as any;
     // split by words and yield each word as a chunk
-    const parts = res.text.split(/\s+/).filter(Boolean);
+    const parts = String(res?.text ?? "")
+      .split(/\s+/)
+      .filter(Boolean);
     for (let i = 0; i < parts.length; i++) {
       yield {
         type: "token",
@@ -105,4 +114,8 @@ export class MockLLMCaller extends BaseLLMCaller {
     // final info chunk
     yield { type: "info", text: "", raw: { finished: true } };
   }
+}
+
+export function llmFormatter(messages: Message[]) {
+  return messages;
 }

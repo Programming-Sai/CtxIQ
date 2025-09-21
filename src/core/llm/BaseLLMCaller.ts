@@ -1,9 +1,7 @@
 // src/core/llm/LLMCaller.ts
-import type { Message } from "../../types";
 import type {
   LLMCaller as LLMCallerType,
   CallOptions,
-  LLMResponse,
   LLMStreamChunk,
 } from "./LLMTypes";
 
@@ -33,16 +31,16 @@ export abstract class BaseLLMCaller implements LLMCallerType {
    * Core method to synchronously request a completion from the LLM adapter.
    * Subclasses MUST implement this method.
    *
-   * @param {Message[]} messages - conversation messages to send to the LLM
+   * @param {{ role: string; content: string }[],} messages - conversation messages to send to the LLM
    * @param {CallOptions} [options] - optional call-time options (e.g. model, temperature)
    * @returns {Promise<LLMResponse>} resolved LLM result including `text`, `usage`, and `raw`.
    *
    * @abstract
    */
-  abstract call(
-    messages: Message[],
+  abstract call<TIn = unknown, TOut = unknown>(
+    messages: TIn[],
     options?: CallOptions,
-  ): Promise<LLMResponse>;
+  ): Promise<TOut>;
 
   /**
    * stream
@@ -58,12 +56,19 @@ export abstract class BaseLLMCaller implements LLMCallerType {
    * @param {CallOptions} [options] - call options
    * @yields {AsyncIterable<LLMStreamChunk>}
    */
-  async *stream(
-    messages: Message[],
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async *stream<TIn = unknown, TOut = unknown>(
+    messages: TIn[],
     options?: CallOptions,
   ): AsyncIterable<LLMStreamChunk> {
     const res = await this.call(messages, options);
-    // yield full text as one chunk (adapters that support real streaming will override)
-    yield { type: "chunk", text: res.text, raw: res.raw };
+    const text =
+      (res &&
+        typeof res === "object" &&
+        ("text" in res ? res.text : undefined)) ??
+      (typeof res === "string" ? res : undefined) ??
+      "";
+
+    yield { type: "chunk", text: String(text), raw: res };
   }
 }

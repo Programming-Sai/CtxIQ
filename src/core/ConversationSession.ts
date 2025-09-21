@@ -79,18 +79,18 @@ export class ConversationSession extends EventEmitter {
    */
   constructor(config: ConversationSessionConfig) {
     super();
-    this.id = config.id;
-    this.createdAt = config.createdAt;
-    this.lastModifiedAt = config.lastModifiedAt;
-    this.sessionName = config.sessionName;
+    this.id = config.id ?? this.generateMessageId();
+    this.createdAt = config.createdAt ?? Date.now();
+    this.lastModifiedAt = config.lastModifiedAt ?? Date.now();
+    this.sessionName = config.sessionName ?? "Untitled";
+    this.SUMMARY_RESERVE_RATIO = config.reservePercentage ?? 0.15;
+    this.summaryFn = config.summeriser;
+    this.llmFormatter = config.llmFormatter;
+    this.tokenCounterFn = config.tokenCounterFn;
     this.messages = new Map();
     this.summaries = new Map();
     this.messageOrder = [];
-    this.SUMMARY_RESERVE_RATIO = config.reservePercentage || 0.15;
-    this.summaryFn = config.summeriser;
     this.windowTokenLimit = 0;
-    this.llmFormatter = config.llmFormatter;
-    this.tokenCounterFn = config.tokenCounterFn;
   }
 
   // ─── Summary Core ────────────────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ export class ConversationSession extends EventEmitter {
       return; // Don't store unusable summary
     }
 
-    const id = this.generateMessageId();
+    const id = summary.id ?? this.generateMessageId();
     summary.id = id;
     summary.role = "summary";
     summary.tokens =
@@ -259,7 +259,7 @@ export class ConversationSession extends EventEmitter {
    */
   addMessage(message: Message): void {
     if (this.isSummaryMessage(message)) return this.addSummary(message);
-    const id = this.generateMessageId();
+    const id = message.id ?? this.generateMessageId();
     message.id = id;
     message.tokens =
       message.tokens || this.countTokensInMessage(message.content);
@@ -852,6 +852,32 @@ export class ConversationSession extends EventEmitter {
    */
   merge(): void {
     throw new Error("Merge is not implemented in this version of CtxIQ.");
+  }
+
+  /**
+   * Cleanly close this session and release resources.
+   *
+   * Call this when:
+   * - The user logs out or switches accounts
+   * - You no longer need this session in memory
+   * - You want to prevent further event emissions
+   *
+   * NOTE: Messages and summaries are discarded
+   * unless they were already persisted to a storage adapter.
+   */
+  close(): void {
+    // Remove any EventEmitter subscriptions
+    this.removeAllListeners();
+
+    // Clear in-memory data structures
+    this.messages.clear();
+    this.summaries.clear();
+    this.messageOrder = [];
+
+    // Optional: null out token counters/formatters to help GC
+    this.tokenCounterFn = undefined;
+    this.summaryFn = undefined;
+    this.llmFormatter = undefined;
   }
 }
 

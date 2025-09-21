@@ -71,6 +71,8 @@ export type LLMError = {
   raw?: unknown;
 };
 
+export type SendMessageInput = string | Message;
+
 /**
  * Minimal LLM caller interface. Implementations (adapters) should conform to this.
  */
@@ -89,4 +91,14 @@ export interface LLMCaller {
     messages: Message[],
     options?: CallOptions,
   ): AsyncIterable<LLMStreamChunk>;
+}
+
+export interface LLMConfig {
+  provider: "mock" | "openai" | "groq";
+  model?: string;
+  apiKey?: string;
+  temperature?: number;
+  maxTokens?: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any; // <— allows future params (top_p, presencePenalty, etc.)
 }

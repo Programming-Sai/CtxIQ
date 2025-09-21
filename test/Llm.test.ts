@@ -1,12 +1,26 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // test/llm.test.ts
 import { MockLLMCaller } from "../src/core/llm/MockLLMCaller";
-import { BaseLLMCaller } from "../src/core/llm/BaseLLMCaller ";
+import { BaseLLMCaller } from "../src/core/llm/BaseLLMCaller";
 import type { Message } from "../src/types";
+import { LLMConfig } from "../src/core/llm";
+
+/**
+ * Minimal expected mock response shape used in tests.
+ * The MockLLMCaller returns an object compatible with this interface.
+ */
+type MockLLMResponse = {
+  text: string;
+  tokensUsed: number;
+  usage?: { totalTokens: number };
+  model?: string | undefined;
+  raw?: any;
+};
 
 describe("LLM plumbing -- MockLLMCaller + BaseLLMCaller", () => {
   describe("MockLLMCaller - basic behavior", () => {
     it("returns deterministic reply and usage based on last user message", async () => {
-      const mock = new MockLLMCaller("Hey: ");
+      const mock = new MockLLMCaller("Hey: ", {} as LLMConfig);
       const messages: Message[] = [
         {
           id: "1",
@@ -24,7 +38,7 @@ describe("LLM plumbing -- MockLLMCaller + BaseLLMCaller", () => {
         },
       ];
 
-      const res = await mock.call(messages);
+      const res = (await mock.call(messages)) as MockLLMResponse;
       expect(res.text).toBe("Hey: Hello test");
       expect(typeof res.tokensUsed).toBe("number");
       expect(res.tokensUsed).toBe(Math.ceil(res.text.length / 4));
@@ -36,7 +50,7 @@ describe("LLM plumbing -- MockLLMCaller + BaseLLMCaller", () => {
     });
 
     it("propagates model option into the response.model field", async () => {
-      const mock = new MockLLMCaller("ModelCheck: ");
+      const mock = new MockLLMCaller("ModelCheck: ", {} as LLMConfig);
       const messages: Message[] = [
         {
           id: "1",
@@ -46,20 +60,22 @@ describe("LLM plumbing -- MockLLMCaller + BaseLLMCaller", () => {
           timestamp: Date.now(),
         },
       ];
-      const res = await mock.call(messages, { model: "test-model-1" });
+      const res = (await mock.call(messages, {
+        model: "test-model-1",
+      })) as MockLLMResponse;
       expect(res.model).toBe("test-model-1");
       expect(res.text).toContain("ModelCheck:");
     });
 
     it("handles empty messages array (returns prefix only)", async () => {
-      const mock = new MockLLMCaller("Empty: ");
-      const res = await mock.call([]);
+      const mock = new MockLLMCaller("Empty: ", {} as LLMConfig);
+      const res = (await mock.call([])) as MockLLMResponse;
       expect(res.text).toBe("Empty: ");
       expect(res.tokensUsed).toBeGreaterThanOrEqual(1);
     });
 
     it("handles whitespace-only last message content", async () => {
-      const mock = new MockLLMCaller("Space: ");
+      const mock = new MockLLMCaller("Space: ", {} as LLMConfig);
       const messages: Message[] = [
         {
           id: "1",
@@ -69,7 +85,7 @@ describe("LLM plumbing -- MockLLMCaller + BaseLLMCaller", () => {
           timestamp: Date.now(),
         },
       ];
-      const res = await mock.call(messages);
+      const res = (await mock.call(messages)) as MockLLMResponse;
       // content retained, prefix present
       expect(res.text).toBe("Space:    ");
       // whitespace still contributes to char length -> tokensUsed should be >= 1
@@ -77,7 +93,7 @@ describe("LLM plumbing -- MockLLMCaller + BaseLLMCaller", () => {
     });
 
     it("handles very large input without throwing and returns sensible token estimate", async () => {
-      const mock = new MockLLMCaller("Big: ");
+      const mock = new MockLLMCaller("Big: ", {} as LLMConfig);
       const big = "x".repeat(50_000);
       const messages: Message[] = [
         {
@@ -88,7 +104,7 @@ describe("LLM plumbing -- MockLLMCaller + BaseLLMCaller", () => {
           timestamp: Date.now(),
         },
       ];
-      const res = await mock.call(messages);
+      const res = (await mock.call(messages)) as MockLLMResponse;
       expect(res.text.startsWith("Big: ")).toBe(true);
       // tokensUsed approximate
       expect(res.tokensUsed).toBeGreaterThanOrEqual(
@@ -99,7 +115,7 @@ describe("LLM plumbing -- MockLLMCaller + BaseLLMCaller", () => {
 
   describe("MockLLMCaller - streaming behavior", () => {
     it("streams token chunks and final info chunk; assembled text equals call()", async () => {
-      const mock = new MockLLMCaller("S: ");
+      const mock = new MockLLMCaller("S: ", {} as LLMConfig);
       const messages: Message[] = [
         {
           id: "1",
@@ -110,7 +126,7 @@ describe("LLM plumbing -- MockLLMCaller + BaseLLMCaller", () => {
         },
       ];
 
-      const callRes = await mock.call(messages);
+      const callRes = (await mock.call(messages)) as MockLLMResponse;
       const parts: string[] = [];
       let sawInfo = false;
 
@@ -134,7 +150,7 @@ describe("LLM plumbing -- MockLLMCaller + BaseLLMCaller", () => {
     });
 
     it("stream async iterator is consumable multiple times only by re-calling (generators are single-use)", async () => {
-      const mock = new MockLLMCaller("One: ");
+      const mock = new MockLLMCaller("One: ", {} as LLMConfig);
       const messages: Message[] = [
         {
           id: "1",
@@ -163,18 +179,20 @@ describe("LLM plumbing -- MockLLMCaller + BaseLLMCaller", () => {
 
   describe("BaseLLMCaller - fallback stream behavior", () => {
     it("BaseLLMCaller.stream fallback yields a single chunk that equals call().text when subclass doesn't implement stream", async () => {
-      // create a quick subclass that only implements call()
+      // create a quick subclass that only implements call() with the generic signature
       class SimpleCaller extends BaseLLMCaller {
         name = "simple";
-        async call(_messages: Message[]) {
+        async call<TIn = unknown, TOut = unknown>(
+          _messages: TIn[],
+        ): Promise<TOut> {
           void _messages;
-          return { text: "simple-reply", raw: null };
+          return { text: "simple-reply", raw: null } as unknown as TOut;
         }
       }
 
       const c = new SimpleCaller();
-      // call() should work
-      const r = await c.call([
+      // call() should work — cast to expected shape
+      const r = (await c.call([
         {
           id: "1",
           role: "user",
@@ -182,13 +200,13 @@ describe("LLM plumbing -- MockLLMCaller + BaseLLMCaller", () => {
           tokens: 0,
           timestamp: Date.now(),
         },
-      ]);
+      ])) as { text: string; raw: any };
       expect(r.text).toBe("simple-reply");
 
       // stream fallback uses call() and yields one chunk
       const parts: string[] = [];
       for await (const ch of c.stream([])) {
-        if (ch.text) parts.push(ch.text);
+        if ((ch as any).text) parts.push((ch as any).text);
       }
       expect(parts.join("")).toBe("simple-reply");
     });
@@ -196,9 +214,11 @@ describe("LLM plumbing -- MockLLMCaller + BaseLLMCaller", () => {
     it("BaseLLMCaller subclasses that do not set capabilities should have empty capabilities object or undefined", () => {
       class SimpleCaller2 extends BaseLLMCaller {
         name = "simple2";
-        async call(_messages: Message[]) {
+        async call<TIn = unknown, TOut = unknown>(
+          _messages: TIn[],
+        ): Promise<TOut> {
           void _messages;
-          return { text: "x", raw: null };
+          return { text: "x", raw: null } as unknown as TOut;
         }
       }
       const c2 = new SimpleCaller2();

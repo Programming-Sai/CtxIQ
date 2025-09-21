@@ -23,6 +23,7 @@ export default {
       // Explicitly run the useConversation test (and any other browser tests you add)
       testMatch: [
         "<rootDir>/test/useConversation.test.tsx",
+        "<rootDir>/test/useSession.test.tsx",
         "<rootDir>/test/**/*.browser.test.(ts|tsx|js)",
       ],
       setupFilesAfterEnv: ["<rootDir>/test/setupTests.ts"],
