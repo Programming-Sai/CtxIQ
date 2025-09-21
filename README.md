@@ -43,7 +43,6 @@ flowchart TD
   AR -->|added to session| CS
 
   %% Persistence controlled by Manager
-  CM -->|save/load session toJSON fromJSON| JSON
   CM -->|save/load session toJSON fromJSON| LS
   CS -->|toJSON fromJSON| CM
 
