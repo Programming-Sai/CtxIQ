@@ -29,7 +29,6 @@ flowchart TD
   end
 
   subgraph Persistence["Optional Persistence Adapters"]
-    JSON["JsonFileAdapter (server)"]
     LS["LocalStorageAdapter (browser)"]
   end
 
