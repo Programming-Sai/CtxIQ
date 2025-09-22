@@ -4,6 +4,14 @@ import type { ConversationSession } from "../core/ConversationSession";
 
 /**
  * Config options for the hook
+ *
+ * @typedef {Object} UseConversationOptions
+ * @property {ConversationManager} [manager] - Supply your own manager instance (useful for tests or SSR).
+ * @property {string|null} [initialActiveSessionId] - Initial active session id to seed the hook state.
+ * @property {boolean} [enableBroadcast=true] - Whether to enable cross-tab syncing (BroadcastChannel/localStorage).
+ * @property {string} [broadcastChannelName='ctxiq:sessions'] - Broadcast channel/localStorage key prefix.
+ * @property {(id: string, session?: ConversationSession) => void} [onSessionCreated] - Callback invoked when a session is created.
+ * @property {(id: string) => void} [onSessionDeleted] - Callback invoked when a session is deleted.
  */
 export type UseConversationOptions = {
   // allow the consumer to supply their own manager (useful for tests / SSR)
@@ -20,7 +28,14 @@ export type UseConversationOptions = {
 };
 
 /**
- * Shape of session metadata returned to UI (keeps state small & serializable)
+ * Minimal session metadata shape returned by the hook.
+ * Kept intentionally small so it is serializable and cheap to store/display in UI lists.
+ *
+ * @typedef {Object} SessionMeta
+ * @property {string} id - session id
+ * @property {string} sessionName - human-readable name
+ * @property {number} [createdAt] - optional creation timestamp
+ * @property {number} [lastModifiedAt] - optional last modified timestamp
  */
 export type SessionMeta = {
   id: string;
@@ -45,12 +60,13 @@ const TAB_ID = (() => {
 })();
 
 /**
- * Global manager singleton.
- * - We keep it in module scope so multiple hook instances share it by default.
- * - It can be overridden by passing `manager` in options.
+ * Returns the global singleton ConversationManager.
  *
- * SSR note: Creating the manager itself is safe server-side (no window usage),
- * but BroadcastChannel / storage sync is only activated inside the hook on the client.
+ * @remarks
+ * - The manager is created lazily and stored in module scope so multiple hook instances share it by default.
+ * - Passing a custom `manager` to the hook allows isolation (e.g. tests or SSR).
+ *
+ * @returns {ConversationManager} the global manager instance
  */
 let _globalManager: ConversationManager | null = null;
 export function getGlobalManager() {
@@ -70,10 +86,36 @@ type BroadcastPayload =
   | { type: "sessionCloned"; id: string; sessionName: string; tabId: string };
 
 /**
- * The hook.
- * - Uses a provided manager or the shared global manager.
- * - Subscribes to manager events and keeps `sessions` and `activeSessionId` local state.
- * - Optionally broadcasts local events to other tabs and listens to remote events.
+ * React hook that exposes a ConversationManager view suitable for UI components.
+ *
+ * Features:
+ * - Uses a provided manager or a shared global manager.
+ * - Keeps a small, serializable list of sessions (`sessions`) and the `activeSessionId`.
+ * - Subscribes to manager events and applies efficient incremental updates (no full list refresh on every event).
+ * - (Optional) broadcasts local changes to other tabs via BroadcastChannel or a localStorage fallback.
+ *
+ * @param {UseConversationOptions} [opts] - Hook configuration.
+ * @returns {{
+ *   manager: ConversationManager,
+ *   sessions: SessionMeta[],
+ *   activeSessionId: string | null,
+ *   createSession: (sessionName?: string, setActive?: boolean) => string,
+ *   addSession: (session: ConversationSession) => boolean,
+ *   setActiveSession: (id: string | null) => string | null,
+ *   deleteSession: (id: string) => boolean,
+ *   clearAllSessions: () => void,
+ *   cloneSession: (id: string, newName?: string) => string | null,
+ *   getSessionByName: (name: string) => ConversationSession | null
+ * }}
+ *
+ * @example
+ * const {
+ *   sessions, activeSessionId, createSession, setActiveSession
+ * } = useConversation({ enableBroadcast: true });
+ *
+ * // create a new session and set active
+ * const id = createSession("Support chat");
+ * setActiveSession(id);
  */
 export function useConversation(opts?: UseConversationOptions) {
   const {

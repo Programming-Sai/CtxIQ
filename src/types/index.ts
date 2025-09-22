@@ -31,9 +31,9 @@ export interface ConversationSessionConfig {
   lastModifiedAt: number;
   sessionName: string;
   reservePercentage?: number;
-  summeriser?: (msgs: Message[], reserve: number) => Message;
-  llmFormatter?: <T>(messages: Message[]) => T[];
-  tokenCounterFn?: (text: string) => number;
+  summeriser?: (msgs: Message[], reserve: number) => Message | Promise<Message>;
+  llmFormatter?: <T>(messages: Message[]) => T[] | Promise<T[]>;
+  tokenCounterFn?: (text: string) => number | Promise<number>;
 }
 
 export interface SerializedSession {

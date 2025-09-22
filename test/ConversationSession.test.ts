@@ -19,10 +19,10 @@ describe("ConversationSession", () => {
       sessionName: "Test Session",
     });
 
-  test("adds and retrieves a message", () => {
+  test("adds and retrieves a message", async () => {
     const session = createSession();
     const msg = makeMessage() as Message;
-    session.addMessage(msg);
+    await session.addMessage(msg);
 
     const all = session.getMessages();
     expect(all).toHaveLength(1);
@@ -33,9 +33,9 @@ describe("ConversationSession", () => {
     expect(byId).toEqual(all[0]);
   });
 
-  test("deletes a message", () => {
+  test("deletes a message", async () => {
     const session = createSession();
-    session.addMessage(makeMessage() as Message);
+    await session.addMessage(makeMessage() as Message);
     const id = session.getMessages()[0].id!;
     const result = session.deleteMessage(id);
 
@@ -43,9 +43,9 @@ describe("ConversationSession", () => {
     expect(session.getMessages()).toHaveLength(0);
   });
 
-  test("edits a message", () => {
+  test("edits a message", async () => {
     const session = createSession();
-    session.addMessage(makeMessage() as Message);
+    await session.addMessage(makeMessage() as Message);
     const orig = session.getMessages()[0];
     const newMsg = { ...orig, content: "Edited" };
     session.editMessage(orig.id!, newMsg);
@@ -54,16 +54,16 @@ describe("ConversationSession", () => {
     expect(edited?.content).toBe("Edited");
   });
 
-  test("clearMessages empties buffer", () => {
+  test("clearMessages empties buffer", async () => {
     const session = createSession();
-    session.addMessage(makeMessage() as Message);
+    await session.addMessage(makeMessage() as Message);
     session.clearMessages();
     expect(session.getMessages()).toHaveLength(0);
   });
 
-  test("clone copies messages", () => {
+  test("clone copies messages", async () => {
     const session = createSession();
-    session.addMessage(makeMessage() as Message);
+    await session.addMessage(makeMessage() as Message);
     const clone = session.clone("sess-2", "Clone");
 
     expect(clone.getMessages()).toHaveLength(1);
@@ -72,18 +72,30 @@ describe("ConversationSession", () => {
   });
 
   describe("Summaries and Compaction", () => {
-    it("should compact messages, excluding those covered by summaries", () => {
+    it("should compact messages, excluding those covered by summaries", async () => {
       const session = createSession();
       session.useSequentialIds = true;
       session.windowTokenLimit = 4;
 
       // Add raw messages
-      session.addMessage({ role: "user", content: "A", tokens: 1 } as Message);
-      session.addMessage({ role: "user", content: "B", tokens: 1 } as Message);
-      session.addMessage({ role: "user", content: "C", tokens: 1 } as Message);
+      await session.addMessage({
+        role: "user",
+        content: "A",
+        tokens: 1,
+      } as Message);
+      await session.addMessage({
+        role: "user",
+        content: "B",
+        tokens: 1,
+      } as Message);
+      await session.addMessage({
+        role: "user",
+        content: "C",
+        tokens: 1,
+      } as Message);
 
       // Summary covering first three
-      session.addMessage({
+      await session.addMessage({
         role: "summary",
         content: "Summ ABC",
         tokens: 2,
@@ -91,13 +103,17 @@ describe("ConversationSession", () => {
       } as Message);
 
       // Add another message after summary
-      session.addMessage({ role: "user", content: "D", tokens: 1 } as Message);
+      await session.addMessage({
+        role: "user",
+        content: "D",
+        tokens: 1,
+      } as Message);
 
       const compacted = session.getCompactedMessages();
       expect(compacted.map((m) => m.content)).toEqual(["Summ ABC", "D"]);
     });
 
-    it("getMessageWindow truncates compacted messages within token limit", () => {
+    it("getMessageWindow truncates compacted messages within token limit", async () => {
       const session = createSession();
       session.windowTokenLimit = 8;
       session.useSequentialIds = true;
@@ -117,7 +133,10 @@ describe("ConversationSession", () => {
         { role: "user", content: "Next", tokens: 8 },
       ];
 
-      data.forEach((item) => session.addMessage(item as Message));
+      // Fix: await each addMessage sequentially (forEach with async callback doesn't wait)
+      for (const item of data) {
+        await session.addMessage(item as Message);
+      }
 
       const compacted = session.getCompactedMessages();
       // compacted should be [Sum1, Next]
@@ -139,35 +158,48 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
       sessionName: "Overflow Test",
       reservePercentage: 0.15,
       summeriser: undefined, // we'll set below
+      // llmFormatter: async (msgs) => msgs,
     });
 
   beforeEach(() => {
     jest.restoreAllMocks();
   });
 
-  it("pure truncation when no summaryFn provided", () => {
+  it("pure truncation when no summaryFn provided", async () => {
     const session = createSession();
     session.windowTokenLimit = 4;
     // 3 messages, each 2 tokens
-    session.addMessage({ role: "user", content: "A", tokens: 2 } as Message);
-    session.addMessage({ role: "user", content: "B", tokens: 2 } as Message);
-    session.addMessage({ role: "user", content: "C", tokens: 2 } as Message);
+    await session.addMessage({
+      role: "user",
+      content: "A",
+      tokens: 2,
+    } as Message);
+    await session.addMessage({
+      role: "user",
+      content: "B",
+      tokens: 2,
+    } as Message);
+    await session.addMessage({
+      role: "user",
+      content: "C",
+      tokens: 2,
+    } as Message);
 
     // window limit 4 tokens → should keep last two
-    const prompt = session.buildPrompt(
+    const prompt = await session.buildPrompt(
       session.windowTokenLimit,
       /*fallback*/ false,
     );
     expect(prompt.map((m) => m.content)).toEqual(["B", "C"]);
   });
 
-  it("inserts summary + fitting messages on overflow", () => {
+  it("inserts summary + fitting messages on overflow", async () => {
     const session = createSession();
     session.windowTokenLimit = 4;
     session.useSequentialIds = true;
 
     // mock countTokens to use the .tokens property
-    jest.spyOn(session, "countTokensInMessage").mockImplementation(() => {
+    jest.spyOn(session, "countTokensInMessage").mockImplementation(async () => {
       // Should not be called since we pass tokens explicitly
       return 9999;
     });
@@ -183,14 +215,14 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
 
     // Add 5 messages, each 2 tokens
     for (let i = 1; i <= 5; i++) {
-      session.addMessage({
+      await session.addMessage({
         role: "user",
         content: `M${i}`,
         tokens: 2,
       } as Message);
     }
     // Total tokens = 10. Window limit 4 → usable=3 (after 15% reserve)
-    const prompt = session.buildPrompt(
+    const prompt = await session.buildPrompt(
       session.windowTokenLimit,
       /*fallback*/ false,
     );
@@ -201,14 +233,14 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
     expect(prompt[1].content).toBe("M5");
   });
 
-  it("reuses existing summary when overflow fully covered", () => {
+  it("reuses existing summary when overflow fully covered", async () => {
     const session = createSession();
     session.windowTokenLimit = 4;
     session.useSequentialIds = true;
 
-    // Add messages 1–4
+    // Add messages 1–3
     for (let i = 1; i <= 3; i++) {
-      session.addMessage({
+      await session.addMessage({
         role: "user",
         content: `M${i}`,
         tokens: 2,
@@ -222,16 +254,16 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
       tokens: 1,
       summaryOf: new Set(["msg-1", "msg-2", "msg-3"]),
     };
-    session.addSummary(postSummary as Message);
+    await session.addSummary(postSummary as Message);
 
-    session.addMessage({
+    await session.addMessage({
       role: "user",
       content: `M5`,
       tokens: 2,
     } as Message);
 
     // Window limit small so overflow=[m1,m2,m3] which is fully covered
-    const prompt = session.buildPrompt(
+    const prompt = await session.buildPrompt(
       session.windowTokenLimit,
       /*fallback*/ false,
     );
@@ -239,31 +271,31 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
     expect(prompt[0].content).toBe("PRE_SUM");
   });
 
-  it("uses summary over full messages when it fits but originals don't", () => {
+  it("uses summary over full messages when it fits but originals don't", async () => {
     const session = createSession();
     session.windowTokenLimit = 5;
     session.useSequentialIds = true;
 
     for (let i = 1; i <= 3; i++) {
-      session.addMessage({
+      await session.addMessage({
         role: "user",
         content: `M${i}`,
         tokens: 3,
       } as Message);
     }
 
-    session.addSummary({
+    await session.addSummary({
       role: "summary",
       content: "SUM",
       tokens: 2,
       summaryOf: new Set(["msg-1", "msg-2", "msg-3"]),
     } as Message);
 
-    const prompt = session.buildPrompt(session.windowTokenLimit, false);
+    const prompt = await session.buildPrompt(session.windowTokenLimit, false);
     expect(prompt.map((m) => m.content)).toEqual(["SUM"]);
   });
 
-  it("fallback to pure truncation when summary too large", () => {
+  it("fallback to pure truncation when summary too large", async () => {
     const session = createSession();
     session.windowTokenLimit = 4;
     session.useSequentialIds = true;
@@ -278,7 +310,7 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
 
     // 4 messages, each 2 tokens => total=8
     for (let i = 1; i <= 4; i++) {
-      session.addMessage({
+      await session.addMessage({
         role: "user",
         content: `M${i}`,
         tokens: 2,
@@ -286,21 +318,21 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
     }
 
     // window limit 4 => fallback should return last two
-    const prompt = session.buildPrompt(
+    const prompt = await session.buildPrompt(
       session.windowTokenLimit,
       /*fallback*/ true,
     );
     expect(prompt.map((m) => m.content)).toEqual(["M3", "M4"]);
   });
 
-  it("uses existing summary when overflow is fully covered by it", () => {
+  it("uses existing summary when overflow is fully covered by it", async () => {
     const session = createSession();
     session.windowTokenLimit = 4;
     session.useSequentialIds = true;
 
     // Add M1, M2, M3
     for (let i = 1; i <= 3; i++) {
-      session.addMessage({
+      await session.addMessage({
         role: "user",
         content: `M${i}`,
         tokens: 2,
@@ -308,7 +340,7 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
     }
 
     // Add summary for M1–M3
-    session.addSummary({
+    await session.addSummary({
       role: "summary",
       content: "SUM123",
       tokens: 1,
@@ -316,24 +348,24 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
     } as Message);
 
     // Add M4
-    session.addMessage({
+    await session.addMessage({
       role: "user",
       content: "M4",
       tokens: 2,
     } as Message);
 
-    const prompt = session.buildPrompt(session.windowTokenLimit, false);
+    const prompt = await session.buildPrompt(session.windowTokenLimit, false);
     expect(prompt.map((m) => m.content)).toEqual(["SUM123", "M4"]);
   });
 
-  it("ignores summary when overflow is not fully covered", () => {
+  it("ignores summary when overflow is not fully covered", async () => {
     const session = createSession();
     session.windowTokenLimit = 4;
     session.useSequentialIds = true;
 
     // Add M1–M4
     for (let i = 1; i <= 4; i++) {
-      session.addMessage({
+      await session.addMessage({
         role: "user",
         content: `M${i}`,
         tokens: 2,
@@ -341,56 +373,28 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
     }
 
     // Summary only for M1–M2 (not enough)
-    session.addSummary({
+    await session.addSummary({
       role: "summary",
       content: "SUM12",
       tokens: 1,
       summaryOf: new Set(["msg-1", "msg-2"]),
     } as Message);
 
-    const prompt = session.buildPrompt(session.windowTokenLimit, false);
+    const prompt = await session.buildPrompt(session.windowTokenLimit, false);
 
     // Expect summary to be skipped because it doesn’t fully cover overflow
     expect(prompt.map((m) => m.content)).toContain("M3");
     expect(prompt.map((m) => m.content)).not.toContain("SUM12");
   });
 
-  it("ignores summary when overflow is not fully covered", () => {
-    const session = createSession();
-    session.windowTokenLimit = 4;
-    session.useSequentialIds = true;
-
-    // Add M1–M4
-    for (let i = 1; i <= 4; i++) {
-      session.addMessage({
-        role: "user",
-        content: `M${i}`,
-        tokens: 2,
-      } as Message);
-    }
-
-    // Summary only for M1–M2 (not enough)
-    session.addSummary({
-      role: "summary",
-      content: "SUM12",
-      tokens: 1,
-      summaryOf: new Set(["msg-1", "msg-2"]),
-    } as Message);
-
-    const prompt = session.buildPrompt(session.windowTokenLimit, false);
-    // Expect summary to be skipped because it doesn’t fully cover overflow
-    expect(prompt.map((m) => m.content)).toContain("M3");
-    expect(prompt.map((m) => m.content)).not.toContain("SUM12");
-  });
-
-  it("falls back to raw messages when summary is too big", () => {
+  it("falls back to raw messages when summary is too big", async () => {
     const session = createSession();
     session.windowTokenLimit = 4;
     session.useSequentialIds = true;
 
     // Add M1–M3
     for (let i = 1; i <= 3; i++) {
-      session.addMessage({
+      await session.addMessage({
         role: "user",
         content: `M${i}`,
         tokens: 2,
@@ -398,47 +402,39 @@ describe("ConversationSession • Strategy 1: Summarise-on-Overflow", () => {
     }
 
     // Add huge summary
-    session.addSummary({
+    await session.addSummary({
       role: "summary",
       content: "HUGE_SUMMARY",
       tokens: 10,
       summaryOf: new Set(["msg-1", "msg-2", "msg-3"]),
     } as Message);
 
-    const prompt = session.buildPrompt(session.windowTokenLimit, false);
-
-    // console.log(
-    //   session.getCompactedMessages(),
-    //   session.messages,
-    //   session.summaries,
-    //   session.messageOrder,
-    //   prompt
-    // );
+    const prompt = await session.buildPrompt(session.windowTokenLimit, false);
 
     // Summary doesn't fit, should fallback
     expect(prompt.map((m) => m.content)).toContain("M3");
   });
 
-  it("always includes system messages at the start of the prompt", () => {
+  it("always includes system messages at the start of the prompt", async () => {
     const session = createSession();
-    session.windowTokenLimit = 4;
+    session.windowTokenLimit = 1;
     session.useSequentialIds = true;
 
-    session.addMessage({
+    await session.addMessage({
       role: "system",
       content: "INIT_SYS",
       tokens: 0,
     } as Message);
     // Add a lot of user/assistant messages...
     for (let i = 0; i < 50; i++) {
-      session.addMessage({
+      await session.addMessage({
         role: "user",
         content: `msg ${i}`,
         tokens: 1,
       } as Message);
     }
 
-    const llmMsgs = session.getLLMMessages(10);
+    const llmMsgs = await session.getLLMMessages(10);
 
     // First messages should be all system prompts
     expect(llmMsgs[0].role).toBe("system");
@@ -468,14 +464,14 @@ describe("ConversationSession • Additional Edge & Integration Tests", () => {
     jest.restoreAllMocks();
   });
 
-  it("updates lastModifiedAt and emits on add/edit/delete/clear", () => {
+  it("updates lastModifiedAt and emits on add/edit/delete/clear", async () => {
     const session = createSession();
     const ts0 = session.lastModifiedAt;
 
     // addMessage
     const addSpy = jest.fn();
     session.on("messageAdded", addSpy);
-    session.addMessage(makeMessage() as Message);
+    await session.addMessage(makeMessage() as Message);
     expect(session.lastModifiedAt).toBeGreaterThan(ts0);
     expect(addSpy).toHaveBeenCalled();
 
@@ -497,7 +493,7 @@ describe("ConversationSession • Additional Edge & Integration Tests", () => {
     expect(delSpy).toHaveBeenCalledWith(msg.id, true);
 
     // clearMessages
-    session.addMessage(makeMessage() as Message);
+    await session.addMessage(makeMessage() as Message);
     const clearSpy = jest.fn();
     session.on("messagesCleared", clearSpy);
     const ts3 = session.lastModifiedAt;
@@ -506,12 +502,16 @@ describe("ConversationSession • Additional Edge & Integration Tests", () => {
     expect(clearSpy).toHaveBeenCalled();
   });
 
-  it("serializes and deserializes to identical state via toJSON/fromJSON", () => {
+  it("serializes and deserializes to identical state via toJSON/fromJSON", async () => {
     const session = createSession();
     session.useSequentialIds = true;
     session.windowTokenLimit = 10;
-    session.addMessage({ role: "user", content: "A", tokens: 1 } as Message);
-    session.addSummary({
+    await session.addMessage({
+      role: "user",
+      content: "A",
+      tokens: 1,
+    } as Message);
+    await session.addSummary({
       role: "summary",
       content: "S",
       tokens: 1,
@@ -533,32 +533,36 @@ describe("ConversationSession • Additional Edge & Integration Tests", () => {
     expect(clone.messageOrder).toEqual(session.messageOrder);
   });
 
-  it("honors a custom tokenCounterFn and falls back when it errors", () => {
+  it("honors a custom tokenCounterFn and falls back when it errors", async () => {
     const session = createSession();
     // custom counter that returns length of string
     session.tokenCounterFn = (txt) => txt.length;
-    expect(session.countTokensInMessage("abc def")).toBe(7);
+    expect(await session.countTokensInMessage("abc def")).toBe(7);
     // custom counter that throws
     session.tokenCounterFn = () => {
       throw new Error();
     };
-    expect(session.countTokensInMessage("one two")).toBe(2);
+    expect(await session.countTokensInMessage("one two")).toBe(2);
   });
 
-  it("throws if llmFormatter returns non-array", () => {
+  it("throws if llmFormatter returns non-array", async () => {
     const session = createSession();
     session.llmFormatter = <T>(_: Message[]) => ({}) as unknown as T[];
-    session.addMessage({ role: "user", content: "X", tokens: 1 } as Message);
-    expect(() => session.getLLMMessages()).toThrow(
+    await session.addMessage({
+      role: "user",
+      content: "X",
+      tokens: 1,
+    } as Message);
+    await expect(session.getLLMMessages()).rejects.toThrow(
       /llmFormatter must return an array/,
     );
   });
 
-  it("setSummaries replaces old set and clearSummaries empties it", () => {
+  it("setSummaries replaces old set and clearSummaries empties it", async () => {
     const session = createSession();
     session.useSequentialIds = true;
     // initial summaries
-    session.addSummary({
+    await session.addSummary({
       role: "summary",
       content: "Old",
       tokens: 1,
@@ -591,25 +595,33 @@ describe("ConversationSession • Additional Edge & Integration Tests", () => {
     expect(session.getSummaries()).toHaveLength(0);
   });
 
-  it("getFirstMessage and getLastMessage behave correctly", () => {
+  it("getFirstMessage and getLastMessage behave correctly", async () => {
     const session = createSession();
     expect(session.getFirstMessage()).toBeUndefined();
     expect(session.getLastMessage()).toBeUndefined();
 
-    session.addMessage({
+    await session.addMessage({
       role: "user",
       content: "First",
       tokens: 1,
     } as Message);
-    session.addMessage({ role: "user", content: "Last", tokens: 1 } as Message);
+    await session.addMessage({
+      role: "user",
+      content: "Last",
+      tokens: 1,
+    } as Message);
 
     expect(session.getFirstMessage()?.content).toBe("First");
     expect(session.getLastMessage()?.content).toBe("Last");
   });
 
-  it("clone produces an independent copy", () => {
+  it("clone produces an independent copy", async () => {
     const session = createSession();
-    session.addMessage({ role: "user", content: "Orig", tokens: 1 } as Message);
+    await session.addMessage({
+      role: "user",
+      content: "Orig",
+      tokens: 1,
+    } as Message);
     const clone = session.clone("new-id", "New Name");
 
     // mutate clone
@@ -625,15 +637,19 @@ describe("ConversationSession • Additional Edge & Integration Tests", () => {
     );
   });
 
-  it("hasMessages and hasSummaryOverflowed reflect session state", () => {
+  it("hasMessages and hasSummaryOverflowed reflect session state", async () => {
     const session = createSession();
     expect(session.hasMessages()).toBe(false);
     expect(session.hasSummaryOverflowed()).toBe(false);
 
-    session.addMessage({ role: "user", content: "X", tokens: 1 } as Message);
+    await session.addMessage({
+      role: "user",
+      content: "X",
+      tokens: 1,
+    } as Message);
     expect(session.hasMessages()).toBe(true);
 
-    session.addSummary({
+    await session.addSummary({
       role: "summary",
       content: "S",
       tokens: 1,
@@ -647,14 +663,18 @@ describe("ConversationSession • Additional Edge & Integration Tests", () => {
     expect(() => session.merge()).toThrow(/not implemented/);
   });
 
-  it("removes references and drops empty summaries when deleting summarized messages", () => {
+  it("removes references and drops empty summaries when deleting summarized messages", async () => {
     const session = createSession();
     session.useSequentialIds = true;
 
     // create a message and a summary of it
-    session.addMessage({ role: "user", content: "X", tokens: 1 } as Message);
+    await session.addMessage({
+      role: "user",
+      content: "X",
+      tokens: 1,
+    } as Message);
     const msgId = session.getMessages()[0].id!;
-    session.addSummary({
+    await session.addSummary({
       role: "summary",
       content: "S",
       tokens: 1,
@@ -668,45 +688,61 @@ describe("ConversationSession • Additional Edge & Integration Tests", () => {
     expect(session.getSummaries()).toHaveLength(0);
   });
 
-  it("never drops system prompts from a built prompt, even under heavy truncation", () => {
+  it("never drops system prompts from a built prompt, even under heavy truncation", async () => {
     const session = createSession();
     session.windowTokenLimit = 1;
     session.useSequentialIds = true;
 
     // add a system prompt and a normal message
-    session.addMessage({
+    await session.addMessage({
       role: "system",
       content: "SYS",
       tokens: 1,
     } as Message);
-    session.addMessage({ role: "user", content: "U", tokens: 1 } as Message);
+    await session.addMessage({
+      role: "user",
+      content: "U",
+      tokens: 1,
+    } as Message);
 
-    const prompt = session.buildPrompt(1, true);
+    const prompt = await session.buildPrompt(1, true);
     expect(prompt[0].role).toBe("system");
     expect(prompt.some((m) => m.role === "system")).toBe(true);
   });
 
-  it("correctly filters messages by role", () => {
+  it("correctly filters messages by role", async () => {
     const session = createSession();
-    session.addMessage({ role: "user", content: "A", tokens: 1 } as Message);
-    session.addMessage({
+    await session.addMessage({
+      role: "user",
+      content: "A",
+      tokens: 1,
+    } as Message);
+    await session.addMessage({
       role: "assistant",
       content: "B",
       tokens: 1,
     } as Message);
-    session.addMessage({ role: "system", content: "C", tokens: 1 } as Message);
+    await session.addMessage({
+      role: "system",
+      content: "C",
+      tokens: 1,
+    } as Message);
 
     expect(
       session.filterMessagesByRole("assistant").map((m) => m.content),
     ).toEqual(["B"]);
   });
 
-  it("preserves summaryOf sets through toJSON/fromJSON", () => {
+  it("preserves summaryOf sets through toJSON/fromJSON", async () => {
     const session = createSession();
     session.useSequentialIds = true;
-    session.addMessage({ role: "user", content: "M", tokens: 1 } as Message);
+    await session.addMessage({
+      role: "user",
+      content: "M",
+      tokens: 1,
+    } as Message);
     const id = session.getMessages()[0].id!;
-    session.addSummary({
+    await session.addSummary({
       role: "summary",
       content: "S",
       tokens: 1,
@@ -722,13 +758,17 @@ describe("ConversationSession • Additional Edge & Integration Tests", () => {
     expect(Array.from(restoredSummary.summaryOf!)).toEqual([id]);
   });
 
-  it("allows a correctly-typed llmFormatter to reshape messages", () => {
+  it("allows a correctly-typed llmFormatter to reshape messages", async () => {
     const session = createSession();
     session.llmFormatter = <T>(msgs: Message[]) =>
       msgs.map((m) => ({ text: m.content, role: m.role })) as unknown as T[];
-    session.addMessage({ role: "user", content: "OK", tokens: 1 } as Message);
+    await session.addMessage({
+      role: "user",
+      content: "OK",
+      tokens: 1,
+    } as Message);
 
-    const out = session.getLLMMessages<{ text: string; role: string }>();
+    const out = await session.getLLMMessages<{ text: string; role: string }>();
     expect(out[0]).toEqual({ text: "OK", role: "user" });
   });
 });

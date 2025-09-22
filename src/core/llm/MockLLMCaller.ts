@@ -119,6 +119,6 @@ export class MockLLMCaller extends BaseLLMCaller {
   }
 }
 
-export function llmFormatter(messages: Message[]) {
+export async function llmFormatter(messages: Message[]) {
   return messages;
 }

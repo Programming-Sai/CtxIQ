@@ -6,6 +6,7 @@ import {
   Message,
   SerializedSession,
 } from "../types";
+import util from "util"; // add at top of file
 
 /**
  * ConversationSession
@@ -66,10 +67,13 @@ export class ConversationSession extends EventEmitter {
   public useSequentialIds = false;
   public messageOrder: string[];
   public SUMMARY_RESERVE_RATIO: number; // 15% of window
-  public summaryFn?: (msgs: Message[], reserve: number) => Message; // user‑injected summary hook
+  public summaryFn?: (
+    msgs: Message[],
+    reserve: number,
+  ) => Message | Promise<Message>; // user‑injected summary hook
   public windowTokenLimit: number;
-  public tokenCounterFn?: (text: string) => number;
-  public llmFormatter?: <T>(messages: Message[]) => T[];
+  public tokenCounterFn?: (text: string) => number | Promise<number>;
+  public llmFormatter?: <T>(messages: Message[]) => T[] | Promise<T[]>;
 
   /**
    * Creates a new conversation session instance.
@@ -104,7 +108,13 @@ export class ConversationSession extends EventEmitter {
    * @param summary - The summary message to add.
    * @emits summaryAdded - Emitted after successfully adding a summary.
    */
-  addSummary(summary: Message): void {
+  async addSummary(summary: Message): Promise<void> {
+    const id = summary.id ?? this.generateMessageId();
+    summary.id = id;
+    summary.role = "summary";
+    summary.tokens =
+      summary.tokens || (await this.countTokensInMessage(summary.content));
+
     if (this.windowTokenLimit > 0 && summary.tokens > this.windowTokenLimit) {
       console.warn(
         `[CtxIQ] Skipping summary ${summary.id} — too large (${summary.tokens} > ${this.windowTokenLimit})`,
@@ -112,11 +122,6 @@ export class ConversationSession extends EventEmitter {
       return; // Don't store unusable summary
     }
 
-    const id = summary.id ?? this.generateMessageId();
-    summary.id = id;
-    summary.role = "summary";
-    summary.tokens =
-      summary.tokens || this.countTokensInMessage(summary.content);
     if (summary.summaryOf && Array.isArray(summary.summaryOf)) {
       summary.summaryOf = new Set(summary.summaryOf);
     }
@@ -257,12 +262,12 @@ export class ConversationSession extends EventEmitter {
    * @param message - The message to add (without an ID).
    * @emits messageAdded - Emitted after successfully adding the message.
    */
-  addMessage(message: Message): void {
+  async addMessage(message: Message): Promise<void> {
     if (this.isSummaryMessage(message)) return this.addSummary(message);
     const id = message.id ?? this.generateMessageId();
     message.id = id;
     message.tokens =
-      message.tokens || this.countTokensInMessage(message.content);
+      message.tokens || (await this.countTokensInMessage(message.content));
     this.messages.set(id, message);
     const existingIndex = this.messageOrder.indexOf(id);
     if (existingIndex !== -1) {
@@ -376,10 +381,10 @@ export class ConversationSession extends EventEmitter {
    * - If no summarizer is provided, older messages are simply truncated.
    * @throws {Error} If an existing summary or a newly created summary exceeds the reserved token budget and `fallbackToTruncation` is false.
    */
-  public buildPrompt(
+  public async buildPrompt(
     windowTokenLimit: number = this.windowTokenLimit,
     fallbackToTruncation: boolean = true,
-  ): Message[] {
+  ): Promise<Message[]> {
     // 1. Extract all system messages from compacted list
     const allMessages = this.getCompactedMessages();
     const systemMessages = allMessages.filter((m) => m.role === "system");
@@ -449,7 +454,7 @@ export class ConversationSession extends EventEmitter {
     }
 
     // 9. Summarise overflow without touching system messages
-    const summaryMsg = this.summaryFn(
+    const summaryMsg = await this.summaryFn(
       overflow.filter((m) => m.role !== "system"),
       reserve,
     );
@@ -609,21 +614,44 @@ export class ConversationSession extends EventEmitter {
    * @returns An array of messages formatted for LLM input.
    * @throws {Error} If `llmFormatter` returns a non-array value.
    */
-  getLLMMessages<T = { role: string; content: string }>(
+
+  async getLLMMessages<T = { role: string; content: string }>(
     windowSize: number = this.windowTokenLimit,
-  ): T[] {
-    const promptMessages = this.buildPrompt(windowSize);
+  ): Promise<T[]> {
+    const promptMessages = await this.buildPrompt(windowSize);
 
     if (this.llmFormatter) {
-      const out = this.llmFormatter<T>(promptMessages);
+      // Call formatter (allow sync or async). If it returns null/undefined, fallback to promptMessages.
+      const maybeOut = await Promise.resolve(
+        this.llmFormatter<T>(promptMessages),
+      );
+      const out = maybeOut == null ? (promptMessages ?? []) : maybeOut;
+
       if (!Array.isArray(out)) {
+        // DEBUG: print diagnostics to help tests
+        // limit depth/length to avoid huge logs
+        const debug = util.inspect(out, { depth: 2, breakLength: 120 });
+        console.error(
+          "[CtxIQ] llmFormatter returned non-array value. typeof:",
+          typeof out,
+          "value:",
+          debug,
+        );
+        console.error(
+          "[CtxIQ] session.llmFormatter (toString):",
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (this.llmFormatter as any).toString?.().slice(0, 500),
+        );
+        // include a helpful stack to trace the call-site
+        console.error(new Error("llmFormatter diagnostic stack").stack);
+        // Now throw (or fallback — see option below)
         throw new Error("llmFormatter must return an array of messages");
       }
-      return out;
+      return out as T[];
     }
 
     // Default = OpenAI-like shape
-    return promptMessages.map((m) => ({
+    return (promptMessages ?? []).map((m) => ({
       role: m.role,
       content: m.content,
     })) as T[];
@@ -664,12 +692,12 @@ export class ConversationSession extends EventEmitter {
    * @remarks
    * - This method catches and ignores errors thrown by a custom `tokenCounterFn`.
    */
-  countTokensInMessage(message: Message | string): number {
+  async countTokensInMessage(message: Message | string): Promise<number> {
     const text = typeof message === "string" ? message : message.content;
 
     if (this.tokenCounterFn) {
       try {
-        const count = this.tokenCounterFn(text);
+        const count = await this.tokenCounterFn(text);
         if (Number.isInteger(count) && count > 0) return count;
       } catch {
         // fall through to default

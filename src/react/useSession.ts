@@ -9,6 +9,14 @@ import {
 } from "../core/llm";
 import { createLLM } from "../core/llm/llmFactory";
 
+/**
+ * Options used by the useSession hook.
+ *
+ * @typedef {Object} UseSessionOptions
+ * @property {ConversationSession} [session] - Existing session instance to wrap. If omitted, the hook creates one.
+ * @property {ConversationSessionConfig} [settings] - Settings used when creating an internal ConversationSession.
+ * @property {BaseLLMCaller | LLMConfig} [llm] - Either an instance of an LLM caller (duck-typed) or a config object used to lazily create one.
+ */
 interface UseSessionOptions {
   /** Optional existing session to wrap. If omitted, a new one is created. */
   session?: ConversationSession;
@@ -20,7 +28,44 @@ interface UseSessionOptions {
 }
 
 /**
- * React hook that exposes a ConversationSession as reactive state.
+ * React hook that exposes a single ConversationSession with reactive lists and convenient actions.
+ *
+ * Behaviour:
+ * - Wraps an existing `ConversationSession` or constructs one from `settings`.
+ * - Mirrors session messages/summaries to React state and subscribes to session events.
+ * - Optionally accepts an LLM caller instance or an LLM config to lazily create a caller.
+ * - Provides `sendMessage()` which persists the user's message and calls the configured LLM.
+ *
+ * @param {UseSessionOptions} [opts] - Hook options.
+ * @returns {{
+ *   session: ConversationSession,
+ *   messages: Message[],
+ *   summaries: Message[],
+ *   addMessage: (msg: Message) => void,
+ *   editMessage: (id: string, updates: Message) => void,
+ *   deleteMessage: (id: string) => boolean,
+ *   clearMessages: () => void,
+ *   buildPrompt: (windowSize?: number) => Message[],
+ *   sendMessage: <TOut = unknown>(input: SendMessageInput, callOpts?: CallOptions) => Promise<TOut>
+ * }}
+ *
+ * @remarks
+ * - `sendMessage`:
+ *   - Accepts either a raw string or a `Message`-shaped object (SendMessageInput).
+ *   - If string is passed: it will be converted into a user message, token-count is computed (via session.tokenCounterFn if present),
+ *     persisted to the session and then the session's `getLLMMessages()` (which runs the session's llmFormatter if provided)
+ *     is passed to `llm.call(...)`.
+ *   - If a Message object is passed: it is persisted as-is (assumed to already contain required fields).
+ *   - `sendMessage` returns whatever the underlying LLM caller returns (generic `TOut`), so consumers can handle provider-specific shapes.
+ *
+ * @example
+ * const { messages, addMessage, sendMessage } = useSession({
+ *   settings: { sessionName: "Demo", id: "demo" },
+ *   llm: { provider: "mock" } // or pass a BaseLLMCaller instance
+ * });
+ *
+ * // send raw text and persist it into session
+ * await sendMessage("Hello world", { model: "x" });
  */
 export function useSession(opts: UseSessionOptions = {}) {
   const { session: externalSession, settings } = opts;
@@ -86,8 +131,8 @@ export function useSession(opts: UseSessionOptions = {}) {
 
   // Convenience actions
   const addMessage = useCallback(
-    (msg: Parameters<ConversationSession["addMessage"]>[0]) =>
-      session.addMessage(msg),
+    async (msg: Parameters<ConversationSession["addMessage"]>[0]) =>
+      await session.addMessage(msg),
     [session],
   );
 
@@ -109,6 +154,16 @@ export function useSession(opts: UseSessionOptions = {}) {
     [session],
   );
 
+  /**
+   * sendMessage generic explanation
+   *
+   * @template TOut
+   * @param {SendMessageInput} input - Either a raw string (user content) or a Message object.
+   * @param {CallOptions} [callOpts] - Optional call-time options forwarded to the LLM caller.
+   * @returns {Promise<TOut>} - Resolves with whatever the configured LLM caller returns (adapter-specific).
+   *
+   * @throws {Error} When no LLM caller is configured (llm param missing).
+   */
   async function sendMessage<TOut = unknown>(
     input: SendMessageInput,
     callOpts?: CallOptions,
@@ -116,7 +171,7 @@ export function useSession(opts: UseSessionOptions = {}) {
     if (!llmRef.current) throw new Error("No LLM configured");
 
     const tokens = session.tokenCounterFn
-      ? session.tokenCounterFn(
+      ? await session.tokenCounterFn(
           typeof input === "string" ? input : input?.content,
         )
       : 0;
@@ -134,10 +189,10 @@ export function useSession(opts: UseSessionOptions = {}) {
         : input;
 
     // 2️⃣ Persist user message
-    session.addMessage(userMsg);
+    await session.addMessage(userMsg);
 
     // 3️⃣ Prepare prompt for LLM
-    const prompt = session.getLLMMessages();
+    const prompt = await session.getLLMMessages();
 
     // 4️⃣ Call the model
     // const rawRes = await llmRef.current?.call(prompt, callOpts);

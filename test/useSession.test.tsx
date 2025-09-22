@@ -53,29 +53,28 @@ describe("useSession hook", () => {
       reservePercentage: 0.15,
     });
     // add some messages
-    s.addMessage({
+    await s.addMessage({
       id: "m1",
       role: "user",
       content: "hello",
       tokens: 1,
       timestamp: Date.now(),
-    });
-    s.addMessage({
+    } as Message);
+    await s.addMessage({
       id: "m2",
       role: "assistant",
       content: "hi",
       tokens: 1,
       timestamp: Date.now(),
-    });
+    } as Message);
 
     let api: any = null;
-    act(() => {
-      render(
-        <HookHarness opts={{ session: s }} setApiRef={(a) => (api = a)} />,
-      );
+    render(<HookHarness opts={{ session: s }} setApiRef={(a) => (api = a)} />);
+
+    await waitFor(() => {
+      expect(api).toBeDefined();
     });
 
-    expect(api).not.toBeNull();
     expect(Array.isArray(api.messages)).toBe(true);
     expect(api.messages.some((m: Message) => m.content === "hello")).toBe(true);
   });
@@ -93,7 +92,8 @@ describe("useSession hook", () => {
       />,
     );
 
-    expect(apiRef).toBeDefined();
+    await waitFor(() => expect(apiRef).toBeDefined());
+
     const createdSession = apiRef.session;
     // defensive: ensure close exists (some implementations may not have it yet)
     if (typeof createdSession.close !== "function") {
@@ -113,7 +113,7 @@ describe("useSession hook", () => {
     }
   });
 
-  it("does not close external session on unmount", () => {
+  it("does not close external session on unmount", async () => {
     const ext = new ConversationSession({
       id: "external-keep",
       createdAt: Date.now(),
@@ -127,13 +127,21 @@ describe("useSession hook", () => {
       <HookHarness opts={{ session: ext }} setApiRef={() => {}} />,
     );
 
+    // allow any effects to run
+    await waitFor(() => {
+      // nothing to assert about apiRef here, just ensure mount completed
+      expect(true).toBe(true);
+    });
+
     unmount();
     expect((ext as any).close).not.toHaveBeenCalled();
   });
 
-  it("exposes addMessage/editMessage/deleteMessage/clearMessages that proxy to session", () => {
+  it("exposes addMessage/editMessage/deleteMessage/clearMessages that proxy to session", async () => {
     let api: any = null;
     render(<HookHarness opts={{}} setApiRef={(a) => (api = a)} />);
+
+    await waitFor(() => expect(api).toBeDefined());
 
     const msg: Message = {
       id: "x1",
@@ -143,37 +151,50 @@ describe("useSession hook", () => {
       timestamp: Date.now(),
     };
 
-    act(() => api.addMessage(msg));
-    expect(api.messages.some((m: Message) => m.content === "from-hook")).toBe(
-      true,
+    await act(async () => {
+      await api.addMessage(msg);
+    });
+    await waitFor(() =>
+      expect(api.messages.some((m: Message) => m.content === "from-hook")).toBe(
+        true,
+      ),
     );
 
-    act(() => api.editMessage(msg.id, { ...msg, content: "edited" }));
-    expect(api.messages.some((m: Message) => m.content === "edited")).toBe(
-      true,
+    await act(async () => {
+      await api.editMessage(msg.id, { ...msg, content: "edited" });
+    });
+    await waitFor(() =>
+      expect(api.messages.some((m: Message) => m.content === "edited")).toBe(
+        true,
+      ),
     );
 
-    act(() => api.deleteMessage(msg.id));
-    expect(api.messages.some((m: Message) => m.id === "x1")).toBe(false);
+    await act(async () => {
+      await api.deleteMessage(msg.id);
+    });
+    await waitFor(() =>
+      expect(api.messages.some((m: Message) => m.id === "x1")).toBe(false),
+    );
 
     // clearMessages
-    act(() => {
-      api.addMessage({
+    await act(async () => {
+      await api.addMessage({
         id: "xx",
         role: "user",
         content: "x",
         tokens: 1,
         timestamp: Date.now(),
       });
-      api.clearMessages();
+      await api.clearMessages();
     });
-    expect(api.messages.length).toBe(0);
+    await waitFor(() => expect(api.messages.length).toBe(0));
   });
 
-  it("listens to session events and updates local state when session emits", () => {
+  it("listens to session events and updates local state when session emits", async () => {
     let api: any = null;
     render(<HookHarness opts={{}} setApiRef={(a) => (api = a)} />);
 
+    await waitFor(() => expect(api).toBeDefined());
     const createdSession: ConversationSession = api.session;
 
     // Add message directly on session (not via hook API)
@@ -187,17 +208,20 @@ describe("useSession hook", () => {
       });
     });
 
-    expect(
-      api.messages.some((m: Message) => m.content === "session-added"),
-    ).toBe(true);
+    await waitFor(() =>
+      expect(
+        api.messages.some((m: Message) => m.content === "session-added"),
+      ).toBe(true),
+    );
   });
 
-  it("unsubscribes on unmount so subsequent session events do not update hook state", () => {
+  it("unsubscribes on unmount so subsequent session events do not update hook state", async () => {
     let api: any = null;
     const { unmount } = render(
       <HookHarness opts={{}} setApiRef={(a) => (api = a)} />,
     );
 
+    await waitFor(() => expect(api).toBeDefined());
     const createdSession: ConversationSession = api.session;
 
     unmount();
@@ -217,14 +241,15 @@ describe("useSession hook", () => {
     expect(true).toBe(true);
   });
 
-  it("buildPrompt proxies to session.buildPrompt (callable)", () => {
+  it("buildPrompt proxies to session.buildPrompt (callable)", async () => {
     let api: any = null;
     render(<HookHarness opts={{}} setApiRef={(a) => (api = a)} />);
 
+    await waitFor(() => expect(api).toBeDefined());
     const s = api.session as ConversationSession;
     const spy = jest.spyOn(s, "buildPrompt");
-    act(() => {
-      api.buildPrompt(100);
+    await act(async () => {
+      await api.buildPrompt(100);
     });
     expect(spy).toHaveBeenCalled();
   });
@@ -232,6 +257,7 @@ describe("useSession hook", () => {
   it("sendMessage throws when no llm configured", async () => {
     let api: any = null;
     render(<HookHarness opts={{}} setApiRef={(a) => (api = a)} />);
+    await waitFor(() => expect(api).toBeDefined());
     await expect(api.sendMessage("hi" as SendMessageInput)).rejects.toThrow(
       /No LLM configured/,
     );
@@ -246,16 +272,21 @@ describe("useSession hook", () => {
       />,
     );
 
-    const res = await act(async () => {
-      return api.sendMessage("hey there");
+    await waitFor(() => expect(api).toBeDefined());
+
+    let res: any;
+    await act(async () => {
+      res = await api.sendMessage("hey there");
     });
 
     // MockLLMCaller created in hook uses "" prefix, so the response text should equal the last content
     // depending on Mock implementation it may return object shape; we assert existence
     expect(res).toBeDefined();
     // ensure the user message was added into the session
-    expect(api.messages.some((m: Message) => m.content === "hey there")).toBe(
-      true,
+    await waitFor(() =>
+      expect(api.messages.some((m: Message) => m.content === "hey there")).toBe(
+        true,
+      ),
     );
   });
 
@@ -268,6 +299,8 @@ describe("useSession hook", () => {
       />,
     );
 
+    await waitFor(() => expect(api).toBeDefined());
+
     const msg: Message = {
       id: "custom-msg",
       role: "user",
@@ -276,7 +309,9 @@ describe("useSession hook", () => {
       timestamp: Date.now(),
     };
 
-    await act(async () => api.sendMessage(msg));
+    await act(async () => {
+      await api.sendMessage(msg);
+    });
     await waitFor(() =>
       expect(api.messages.some((m: Message) => m.id === "custom-msg")).toBe(
         true,
@@ -303,7 +338,11 @@ describe("useSession hook", () => {
       />,
     );
 
-    await act(async () => api.sendMessage("abc"));
+    await waitFor(() => expect(api).toBeDefined());
+
+    await act(async () => {
+      await api.sendMessage("abc");
+    });
 
     const added = api.messages.find((m: Message) => m.content === "abc");
     expect(added).toBeDefined();
@@ -327,7 +366,12 @@ describe("useSession hook", () => {
       <HookHarness opts={{ llm: stub } as any} setApiRef={(a) => (api = a)} />,
     );
 
-    const r = await act(async () => api.sendMessage("hi stub"));
+    await waitFor(() => expect(api).toBeDefined());
+
+    let r: any;
+    await act(async () => {
+      r = await api.sendMessage("hi stub");
+    });
     expect(r).toBeDefined();
     expect(stub.calls.length).toBeGreaterThan(0);
   });
@@ -350,14 +394,23 @@ describe("useSession hook", () => {
       />,
     );
 
-    // They should each have llmRef created (independent instances)
-    expect(apiA).toBeDefined();
-    expect(apiB).toBeDefined();
+    await waitFor(() => expect(apiA).toBeDefined());
+    await waitFor(() => expect(apiB).toBeDefined());
+
     // call sendMessage on each to ensure they both perform
-    await act(async () => apiA.sendMessage("x"));
-    await act(async () => apiB.sendMessage("y"));
-    expect(apiA.messages.some((m: any) => m.content === "x")).toBe(true);
-    expect(apiB.messages.some((m: any) => m.content === "y")).toBe(true);
+    await act(async () => {
+      await apiA.sendMessage("x");
+    });
+    await act(async () => {
+      await apiB.sendMessage("y");
+    });
+
+    await waitFor(() =>
+      expect(apiA.messages.some((m: any) => m.content === "x")).toBe(true),
+    );
+    await waitFor(() =>
+      expect(apiB.messages.some((m: any) => m.content === "y")).toBe(true),
+    );
   });
 
   it("buildPrompt/getLLMMessages flow: sendMessage calls getLLMMessages internally (spy)", async () => {
@@ -369,19 +422,24 @@ describe("useSession hook", () => {
       />,
     );
 
+    await waitFor(() => expect(api).toBeDefined());
     const session: ConversationSession = api.session;
     const spy = jest.spyOn(session, "getLLMMessages");
 
-    await act(async () => api.sendMessage("prompt-check"));
+    await act(async () => {
+      await api.sendMessage("prompt-check");
+    });
 
     expect(spy).toHaveBeenCalled();
   });
 
-  it("hook API functions are stable across renders (memoized)", () => {
+  it("hook API functions are stable across renders (memoized)", async () => {
     let api: any = null;
     const { rerender } = render(
       <HookHarness opts={{}} setApiRef={(a) => (api = a)} />,
     );
+
+    await waitFor(() => expect(api).toBeDefined());
 
     const a1 = api.addMessage;
     const a2 = api.deleteMessage;
@@ -392,9 +450,10 @@ describe("useSession hook", () => {
     expect(typeof api.deleteMessage).toBe("function");
   });
 
-  it("buildPrompt returns data synchronously and does not throw for default session", () => {
+  it("buildPrompt returns data synchronously and does not throw for default session", async () => {
     let api: any = null;
     render(<HookHarness opts={{}} setApiRef={(a) => (api = a)} />);
-    expect(() => api.buildPrompt(100)).not.toThrow();
+    await waitFor(() => expect(api).toBeDefined());
+    await expect(api.buildPrompt(100)).resolves.not.toThrow();
   });
 });
