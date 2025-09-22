@@ -2,3 +2,4 @@
 export * from "../../types/LLMTypes";
 export * from "./BaseLLMCaller";
 export * from "./MockLLMCaller";
+export * from "./llmFactory";

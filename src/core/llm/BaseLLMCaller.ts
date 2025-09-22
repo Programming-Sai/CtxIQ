@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 // src/core/llm/LLMCaller.ts
 import type {
   LLMCaller as LLMCallerType,

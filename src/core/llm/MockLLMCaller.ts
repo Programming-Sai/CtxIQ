@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 // src/core/llm/MockLLMCaller.ts
 import { BaseLLMCaller } from "./BaseLLMCaller";
 import type { Message } from "../../types";

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // test/llm.test.ts
 import { MockLLMCaller } from "../src/core/llm/MockLLMCaller";
 import { BaseLLMCaller } from "../src/core/llm/BaseLLMCaller";

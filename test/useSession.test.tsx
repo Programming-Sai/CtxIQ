@@ -8,7 +8,6 @@ import { useSession } from "../src/react/useSession";
 import { ConversationSession } from "../src/core/ConversationSession";
 import {
   BaseLLMCaller,
-  MockLLMCaller,
   LLMConfig,
   CallOptions,
   SendMessageInput,

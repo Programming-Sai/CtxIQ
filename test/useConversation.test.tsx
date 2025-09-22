@@ -27,7 +27,6 @@ const uuidv4 = (() => {
       return () => (crypto as any).randomUUID();
   } catch {}
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { randomUUID } = require("crypto");
     if (typeof randomUUID === "function") return () => randomUUID();
   } catch {}
