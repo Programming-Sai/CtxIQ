@@ -10,7 +10,8 @@ Context and memory orchestration toolkit for building smarter AI assistants in T
 
 ---
 
-> [!WARNING] > **This project is under active development.**  
+> [!WARNING]  
+> This project is under active development.
 > Expect frequent updates and breaking changes until the first stable release.  
 > Follow for progress or contribute!
 
