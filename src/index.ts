@@ -1,17 +1,15 @@
-// src/index.ts
-
 // Core
 export * from "./core/ConversationManager";
 export * from "./core/ConversationSession";
 
 // Tokens
-export * from "./core/tokens"; // exports all token-related classes
+export * from "./core/tokens";
 
 // Storage
-export * from "./core/storage"; // exports storage adaptors
+export * from "./core/storage";
 
 // LLM
-export * from "./core/llm"; // exports BaseLLMCaller, MockLLMCaller, etc.
+export * from "./core/llm";
 
 // React hooks
 export * from "./react";

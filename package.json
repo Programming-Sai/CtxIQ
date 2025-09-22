@@ -18,27 +18,74 @@
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "ts-jest": "^29.4.4",
+    "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "uuid": "^13.0.0"
   },
   "name": "ctxiq",
   "version": "0.1.0",
   "description": "Context and memory orchestration toolkit for building smarter AI assistants with TypeScript.",
-  "main": "dist/cjs/index.js",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "core": [
+        "dist/core/index.d.ts"
+      ],
+      "core/llm": [
+        "dist/core/llm/index.d.ts"
+      ],
+      "core/storage": [
+        "dist/core/storage/index.d.ts"
+      ],
+      "core/tokens": [
+        "dist/core/tokens/index.d.ts"
+      ],
+      "react": [
+        "dist/react/index.d.ts"
+      ],
+      "types": [
+        "dist/types/index.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
-      "require": "./dist/cjs/index.js"
+      "require": "./dist/index.cjs"
+    },
+    "./core": {
+      "import": "./dist/core/index.js",
+      "require": "./dist/core/index.cjs"
+    },
+    "./core/llm": {
+      "import": "./dist/core/llm/index.js",
+      "require": "./dist/core/llm/index.cjs"
+    },
+    "./core/storage": {
+      "import": "./dist/core/storage/index.js",
+      "require": "./dist/core/storage/index.cjs"
+    },
+    "./core/tokens": {
+      "import": "./dist/core/tokens/index.js",
+      "require": "./dist/core/tokens/index.cjs"
+    },
+    "./react": {
+      "import": "./dist/react/index.js",
+      "require": "./dist/react/index.cjs"
+    },
+    "./types": {
+      "import": "./dist/types/index.js",
+      "require": "./dist/types/index.cjs"
     }
   },
   "type": "module",
   "scripts": {
-    "dev": "node dist/index.js",
-    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "clean": "tsup --clean",
     "prebuild": "npm run clean",
-    "build": "tsc && tsc --module CommonJS --outDir dist/cjs",
+    "build": "tsup",
     "test": "jest --config jest.config.mjs",
     "lint": "eslint src test --ext .ts,.tsx",
     "format": "prettier --write .",
