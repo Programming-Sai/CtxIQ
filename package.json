@@ -113,7 +113,7 @@
   "bugs": {
     "url": "https://github.com/Programming-Sai/CtxIQ/issues"
   },
-  "homepage": "https://github.com/Programming-Sai/CtxIQ#readme",
+  "homepage": "https://ctxiq.vercel.app",
   "dependencies": {
     "@dqbd/tiktoken": "^1.0.22"
   },
