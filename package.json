@@ -23,7 +23,7 @@
     "uuid": "^13.0.0"
   },
   "name": "ctxiq",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Context and memory orchestration toolkit for building smarter AI assistants with TypeScript.",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
