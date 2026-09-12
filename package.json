@@ -9,6 +9,7 @@
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.34.1",
     "@typescript-eslint/parser": "^8.34.1",
+    "@vitest/coverage-v8": "^4.1.11",
     "eslint": "^9.29.0",
     "eslint-config-prettier": "^10.1.5",
     "eslint-plugin-prettier": "^5.5.0",
@@ -20,7 +21,8 @@
     "ts-jest": "^29.4.4",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "vitest": "^4.1.11"
   },
   "name": "ctxiq",
   "version": "0.1.1",

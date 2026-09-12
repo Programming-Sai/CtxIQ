@@ -139,6 +139,16 @@ export class ConversationManager extends EventEmitter {
   }
 
   /**
+   * Returns a session by ID.
+   *
+   * @param id - Session ID.
+   * @returns The session or null if not found.
+   */
+  getSession(id: string): ConversationSession | null {
+    return this.sessions.get(id) ?? null;
+  }
+
+  /**
    * Deletes a session by ID.
    * Emits `sessionDeleted` with (id).
    * If that session was active and the user didn’t reassign, reassigns to the most recently modified.
